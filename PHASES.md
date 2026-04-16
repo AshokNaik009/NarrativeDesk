@@ -1,241 +1,170 @@
 # NarrativeDesk — Implementation Phases
 
-## Phase 0: Foundation & Infrastructure (Weekend 1 — Days 1-2)
+> **Data sources changed**: Using Finnhub (not CryptoPanic) for news. Alpaca deferred until keys are set up.
+
+---
+
+## Phase 0: Foundation & Infrastructure — DONE
 ### Goal
 Establish the core system architecture, database schema, and deployment pipeline.
 
 **Deliverables:**
-- [ ] Postgres schema (events, filter_decisions, agent_invocations, subagent_invocations, thesis_versions, proposed_decisions, pending_approvals, executed_trades, portfolio_snapshots, outcome_prices)
-- [ ] Render setup: three services scaffolded (background worker, web service, Postgres)
-- [ ] .env configuration template with all LLM/API keys
-- [ ] pnpm workspace structure (root + worker + web)
-- [ ] LangChain model wrappers for Groq, Gemini, OpenRouter (model-agnostic)
-- [ ] Basic deployment CI/CD (Render GitHub integration)
+- [x] Postgres schema (10 tables) deployed to Render (`src/db/schema.sql`)
+- [x] DB client with SSL + connection pool (`src/db/client.ts`)
+- [x] .env configuration with Groq, Gemini, OpenRouter, Finnhub, Render Postgres
+- [x] TypeScript project scaffolded (tsconfig, npm, src/ directory structure)
+- [x] Config module with all env vars and defaults (`src/config.ts`)
+- [x] Zod schemas for Decision, Credibility, Event (`src/types.ts`)
+- [x] DB schema initialized on Render Postgres (verified 10 tables live)
+- [x] DB connection verified end-to-end
+- [x] npm scripts: `dev:worker`, `dev:web`, `build`, `start:worker`, `start:web`, `db:init`
+- [x] Entry points: `src/worker.ts` and `src/server.ts`
+- [x] Zero TypeScript compilation errors
 
-**Blockers None**
+**Status:** COMPLETE
 
 ---
 
-## Phase 1: Ingestion & Filtering (Weekend 1 — Days 1-2)
+## Phase 1: Ingestion & Filtering — DONE
 ### Goal
 Build the real-time data pipeline and non-LLM filter layer.
 
 **Deliverables:**
-- [ ] CryptoPanic adapter: poll headlines every minute
-- [ ] Binance WebSocket adapter: ingest price ticks
-- [ ] EventFilter module (pure): dedupe, watchlist, rate-limit, source reputation
-- [ ] Database insert flow for normalized events and filter decisions
-- [ ] Logging of all filter decisions to filter_decisions table
-- [ ] Unit tests for EventFilter (~15-20 tests)
+- [x] Finnhub adapter: fetch crypto news + quotes (`src/ingestion/finnhub.ts`)
+- [x] Binance WebSocket adapter: ingest price ticks (`src/ingestion/binance.ts`)
+- [x] EventFilter module (pure): dedupe, watchlist, rate-limit, source reputation (`src/filter/EventFilter.ts`)
+- [x] Database insert flow for events and filter decisions
+- [x] Worker entry point wired: Finnhub polls every 60s, Binance WS connected
+- [x] Verified live: 20 news items fetched, 10 passed filter, price ticks flowing
+- [ ] Unit tests for EventFilter (~15-20 tests) — deferred to Phase 7
 
-**Blockers:** Phase 0 (schema, DB connection)
+**Status:** COMPLETE (tests deferred)
 
 ---
 
-## Phase 2: LLM Agent Core (Weekend 1 — Days 2-3)
+## Phase 2: LLM Agent Core
 ### Goal
 Implement the main agent and credibility sub-agent.
 
 **Deliverables:**
-- [ ] Main agent scaffolding with deepagentsjs
-- [ ] Agent system prompt (default hold, novel high-conviction, mandate invalidation)
-- [ ] Credibility sub-agent (Gemini) with narrow scope
-- [ ] placePaperTrade tool with strict Zod schema
-- [ ] DecisionSchemaValidator module (pure): handle LLM output flakiness
-- [ ] Thesis file read/write via agent virtual FS with Postgres sync
-- [ ] Agent invocation logging (tokens, latency, schema compliance)
+- [x] Main agent via Groq SDK (llama-3.3-70b-versatile) (`src/agent/llm.ts`)
+- [x] Agent system prompt (default hold, novel high-conviction, mandate invalidation)
+- [x] Credibility sub-agent via Gemini 2.0 Flash
+- [x] DecisionSchemaValidator module (pure) (`src/filter/DecisionSchemaValidator.ts`)
+- [x] Agent invocation logging function
+- [ ] Thesis file manager (read/write/diff with Postgres sync)
 - [ ] Unit tests for DecisionSchemaValidator (~12-15 tests)
 
-**Blockers:** Phase 1 (filter decisions arriving), Phase 0 (LLM clients)
+**Status:** ~60% complete (LLM calls built, thesis manager and tests missing)
 
 ---
 
-## Phase 3: Guardrails & Safety (Weekend 1 — Day 3)
+## Phase 3: Guardrails & Safety
 ### Goal
 Enforce hard constraints before any trade reaches human review.
 
 **Deliverables:**
-- [ ] GuardrailEngine module (pure): enforce max 10%, max 3 positions, max 5 trades/24h, 15m cooldown, 5% stop-loss
-- [ ] Portfolio state query from Alpaca
+- [x] GuardrailEngine module (pure) (`src/guardrails/GuardrailEngine.ts`)
+- [x] InvalidationEvaluator module (pure) (`src/guardrails/InvalidationEvaluator.ts`)
+- [ ] Portfolio state query (deferred until Alpaca keys ready)
 - [ ] Rejection flow with structured feedback to agent
-- [ ] Guardrail decision logging
+- [ ] Guardrail decision logging to DB
 - [ ] Unit tests for GuardrailEngine (~15 tests)
 - [ ] Unit tests for InvalidationEvaluator (~10 tests)
 
-**Blockers:** Phase 2 (proposed decisions), Phase 1 (portfolio state)
+**Status:** ~40% complete (pure modules done, integration pending)
 
 ---
 
-## Phase 4: Human-in-the-Loop & Dashboard (Weekend 1 — Days 3-4)
+## Phase 4: Human-in-the-Loop & Dashboard
 ### Goal
 Build the approval loop and minimal web UI.
 
 **Deliverables:**
-- [ ] ApprovalStateMachine module (pure): pending → {approved, rejected, edited, expired}
-- [ ] Idempotency on approval actions (approval ID deduplication)
-- [ ] 15-minute auto-expiration with deadline enforcement
-- [ ] pending_approvals table with HITL state
+- [x] ApprovalStateMachine module (pure) (`src/hitl/ApprovalStateMachine.ts`)
 - [ ] Express web service scaffolding
-- [ ] HTMX dashboard UI: pending approvals list with 15m countdown
-- [ ] Approval form: approve, reject, edit-size, tell-agent-to-wait
+- [ ] HTMX dashboard: pending approvals with 15m countdown
+- [ ] Approval form: approve, reject, edit-size, wait
 - [ ] Self-tag dropdown (reason enum)
 - [ ] Dashboard polling every 2-3 seconds
 - [ ] Unit tests for ApprovalStateMachine (~12 tests)
 
-**Blockers:** Phase 3 (guardrails pass), Phase 0 (web service)
+**Status:** ~20% complete (state machine done, no dashboard yet)
 
 ---
 
-## Phase 5: Trade Execution & Monitoring (Weekend 1 — Day 4)
+## Phase 5: Trade Execution & Monitoring
 ### Goal
 Connect to Alpaca and implement invalidation watcher.
 
 **Deliverables:**
-- [ ] Alpaca paper trading client integration
-- [ ] Approved trade → Alpaca execution flow
-- [ ] executed_trades table with entry price, invalidation condition
-- [ ] InvalidationEvaluator module (pure): check if invalidation trigger fired
-- [ ] Background loop: poll market state every 1-5 minutes, evaluate all open positions
-- [ ] Auto-close on triggered invalidation with logging
-- [ ] Portfolio snapshot query and logging
-- [ ] Alpaca integration tests (paper sandbox)
+- [ ] Alpaca paper trading client (deferred — no API keys yet)
+- [ ] Approved trade → execution flow
+- [ ] Invalidation watcher background loop
+- [ ] Portfolio snapshot logging
 
-**Blockers:** Phase 4 (approval state), Phase 0 (Alpaca API setup)
+**Status:** Not started (blocked on Alpaca keys)
 
 ---
 
-## Phase 6: End-to-End Plumbing (Weekend 1 — Day 4)
+## Phase 6: End-to-End Plumbing
 ### Goal
 Wire all phases together into a running system.
 
 **Deliverables:**
-- [ ] Agent loop orchestration: {events} → filter → agent → guardrails → approval queue
-- [ ] Agent rejection feedback loop: guardrail rejection → thesis update
+- [ ] Worker entry point: ingestion → filter → agent → guardrails → approval queue
 - [ ] Thesis versioning and diff tracking
-- [ ] Self-ping mechanism: background worker → web service every 10 minutes (prevent sleep)
-- [ ] Error handling and dead-letter queues for failed LLM calls
-- [ ] Logging layer: all decisions, agent calls, sub-agent calls logged to Postgres
-- [ ] Integration tests for ingestion → execution flow
+- [ ] Self-ping mechanism (worker → web every 10m)
+- [ ] Error handling for failed LLM calls
 
-**Blockers:** All earlier phases
+**Status:** Not started
 
 ---
 
-## Phase 7: Testing & Hardening (Weekend 1 — End)
+## Phase 7: Testing & Hardening
 ### Goal
 Ensure reliability before going live.
 
 **Deliverables:**
-- [ ] Integration tests: dashboard routes (supertest + test DB)
-- [ ] Integration tests: ingestion adapters (recorded fixtures)
-- [ ] Integration tests: Alpaca client (paper sandbox)
-- [ ] Schema validation for all Postgres inserts
-- [ ] Rate-limit token bucket wrapper around LLM clients
-- [ ] Graceful error handling for Groq rate limits (fall back to OpenRouter)
-- [ ] Test coverage: 90%+ on five unit-tested modules
+- [ ] Unit tests for all 5 pure modules (EventFilter, DecisionSchemaValidator, GuardrailEngine, InvalidationEvaluator, ApprovalStateMachine)
+- [ ] Integration tests: Finnhub adapter, dashboard routes
+- [ ] Rate-limit token bucket for LLM clients
+- [ ] Groq → OpenRouter fallback on rate limit
 
-**Blockers:** All earlier phases
+**Status:** Not started
 
 ---
 
-## Phase 8: Deployment & Go-Live (End of Weekend 1)
+## Phase 8: Deployment & Go-Live
 ### Goal
 Get the system running on Render free tier.
 
 **Deliverables:**
-- [ ] Render database provisioning (free Postgres)
-- [ ] Background worker service on Render (free tier)
-- [ ] Web service on Render (free tier)
-- [ ] GitHub → Render auto-deploy on push to main
-- [ ] All environment variables configured on Render dashboard
-- [ ] Health checks: worker self-ping, web service readiness
-- [ ] Verify end-to-end: news → filter → agent → approval → trade → logging
+- [ ] Background worker on Render
+- [ ] Web service on Render
+- [x] Postgres on Render (provisioned, URL in .env)
+- [ ] GitHub → Render auto-deploy
+- [ ] End-to-end verification
 
-**Blockers:** Phase 6 (plumbing complete)
+**Status:** ~10% (DB provisioned only)
 
 ---
 
-## Phase 9: Live Running & Observation (Weekdays between weekends)
-### Goal
-Generate real data, identify bugs, gather signal for metrics.
-
-**Activities:**
-- Monitor dashboard for pending approvals
-- Approve, reject, and edit trade proposals
-- Tag each decision with reason
-- Watch for edge cases: rate limits, stale approvals, missed invalidations
-- Log observations for Phase 10
-
-**Success Criteria:**
-- System runs 24/7 without crashes
-- At least 30–80 agent invocations
-- At least 3–10 executed trades
-- No duplicate trades (idempotency works)
-- Invalidation triggers accurate when checked
-
----
-
-## Phase 10: Measurement & Polish (Weekend 2)
-### Goal
-Extract learnings from the live run, measure agent quality, ship final UI.
-
-**Deliverables:**
-- [ ] MetricsCalculator module: compute Layers 1–4 metrics
-  - Layer 1 (component): model, tokens, latency, schema compliance
-  - Layer 2 (decision): classification breakdown, thesis deltas, sub-agent correlation
-  - Layer 3 (trade): win rate, profit factor, invalidation accuracy
-  - Layer 4 (HITL): approval rate, time-to-decision, expiration rate, edit rate
-- [ ] Weekly metrics report job (markdown export, checked into repo)
-- [ ] Decision log exporter: format for CC-SKILLS-Evals harness
-- [ ] Dashboard enhancements:
-  - [ ] Portfolio view (current positions, P&L, cash)
-  - [ ] Recent decisions view (last 20 with outcomes)
-  - [ ] Current thesis view (live markdown)
-- [ ] Bug fixes from Phase 9 observations
-- [ ] Integration tests for MetricsCalculator and exporters
-
-**Blockers:** Phase 9 (live data collected)
-
----
-
-## Phase 11: Documentation & Writeup
-### Goal
-Capture the narrative and architecture for the blog post.
-
-**Deliverables:**
-- [ ] Blog post draft: "Real-time Narrative Reasoning Under HITL Constraints"
-- [ ] Architecture diagram (ingestion → filter → agent → approval → execution)
-- [ ] Key findings:
-  - Latency profile (how fast is approval-to-execution?)
-  - Agent quality (approval rate, rejection reasons, outcome correlation)
-  - HITL dynamics (human judgment patterns, edit rate)
-- [ ] Lessons for the series: real-time ≠ streaming, state persistence matters, HITL is the real product
-
-**Blockers:** Phase 10 (metrics and polish)
+## Phase 9–11: Observation, Measurement, Writeup
+(Unchanged — these come after deployment)
 
 ---
 
 ## Summary Timeline
 
-| Phase | Effort | Target Dates |
-|-------|--------|--------------|
-| 0–7 | 4 days | Weekend 1 (setup + implementation) |
-| 8 | 1 day | End of Weekend 1 (go-live) |
-| 9 | 5 days | Weekdays (observation, ~30-80 invocations) |
-| 10 | 2 days | Weekend 2 (measurement + polish) |
-| 11 | 1 day | Post-project (writeup) |
-
-**Total: ~2 weekends + 1 week = ~3 weeks**
-
----
-
-## Success Criteria (End of Phase 11)
-
-- [ ] System runs stably on Render free tier with zero marginal cost
-- [ ] At least 50+ agent invocations logged with full component metrics
-- [ ] At least 5+ executed trades with outcome tracking at +15m, +1h, +4h, +24h
-- [ ] Decision log exportable to CC-SKILLS-Evals format
-- [ ] Approval/rejection patterns and timing metrics logged
-- [ ] Blog post published with clear narrative on real-time + HITL tradeoffs
-- [ ] Repository is public, well-documented, and reproducible
-
+| Phase | Status | Key blocker |
+|-------|--------|-------------|
+| 0 | **DONE** | — |
+| 1 | **DONE** | Tests deferred |
+| 2 | ~60% | Need thesis manager |
+| 3 | ~40% | Alpaca keys for portfolio |
+| 4 | ~20% | Need Express + HTMX dashboard |
+| 5 | 0% | Blocked on Alpaca keys |
+| 6 | 0% | Needs all above |
+| 7 | 0% | Needs all above |
+| 8 | ~10% | Needs all above |

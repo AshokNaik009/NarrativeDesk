@@ -1,0 +1,34 @@
+{
+  "name": "narrativedesk",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:worker": "tsx watch src/worker.ts",
+    "dev:web": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start:worker": "node dist/worker.js",
+    "start:web": "node dist/server.js",
+    "db:init": "tsx src/db/init.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "description": "Real-time narrative-driven crypto paper-trading agent with HITL approval",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "finnhub": "^2.0.13",
+    "groq-sdk": "^1.1.2",
+    "pg": "^8.20.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
+  }
+}
