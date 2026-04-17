@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { initDb, query } from "./db/client.js";
 import { transition } from "./hitl/ApprovalStateMachine.js";
 import { ApprovalStatus } from "./types.js";
+import { getHealth, getMetrics } from "./utils/health.js";
 
 const app = express();
 app.use(express.json());
@@ -19,9 +20,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+// Health check — detailed service status
+app.get("/health", async (_req, res) => {
+  try {
+    const health = await getHealth();
+    const statusCode = health.services.every((s) => s.status === "ok") ? 200 : 503;
+    res.status(statusCode).json(health);
+  } catch (err) {
+    res.status(503).json({
+      status: "error",
+      error: (err as Error).message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Metrics endpoint — activity metrics
+app.get("/metrics", async (_req, res) => {
+  try {
+    const metrics = await getMetrics();
+    res.json(metrics);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 // Dashboard home — placeholder until Phase 4

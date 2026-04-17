@@ -40,6 +40,71 @@ Respond with ONLY valid JSON: {"rating": <1-5>, "reasoning": "<brief explanation
 
 const GEMINI_MODEL = "gemini-flash-latest"; // Use flash-latest for best compatibility
 
+async function callMainAgentGroq(
+  userPrompt: string
+): Promise<{ content: string; tokens: { prompt: number; completion: number } } | null> {
+  try {
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content || "";
+    const tokens = {
+      prompt: response.usage?.prompt_tokens || 0,
+      completion: response.usage?.completion_tokens || 0,
+    };
+
+    return { content, tokens };
+  } catch (err: any) {
+    if (err.message?.includes("429") || err.message?.includes("rate_limit")) {
+      console.warn("[Agent] Groq rate limited, will fallback to OpenRouter");
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function callMainAgentOpenRouter(
+  userPrompt: string
+): Promise<{ content: string; tokens: { prompt: number; completion: number } }> {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.openRouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "meta-llama/llama-3.3-70b-instruct",
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as any;
+  const content = data.choices?.[0]?.message?.content || "";
+  const tokens = {
+    prompt: data.usage?.prompt_tokens || 0,
+    completion: data.usage?.completion_tokens || 0,
+  };
+
+  return { content, tokens };
+}
+
 export async function invokeMainAgent(
   event: { headline?: string; symbol?: string; rawPayload: Record<string, unknown> },
   currentThesis: string,
@@ -53,33 +118,29 @@ export async function invokeMainAgent(
   }New event:\nSymbol: ${event.symbol || "general"}\nHeadline: ${event.headline || "N/A"}\nData: ${JSON.stringify(event.rawPayload).slice(0, 500)}`;
 
   try {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      response_format: { type: "json_object" },
-    });
+    // Try Groq first
+    let result = await callMainAgentGroq(userPrompt);
 
-    const latencyMs = Date.now() - start;
-    const content = response.choices[0]?.message?.content || "";
-    const tokens = {
-      prompt: response.usage?.prompt_tokens || 0,
-      completion: response.usage?.completion_tokens || 0,
-    };
-
-    const result = validateDecision(content);
-
-    if (result.success) {
-      return { decision: result.data, tokens, latencyMs };
+    // Fallback to OpenRouter if Groq is rate-limited
+    if (result === null) {
+      console.log("[Agent] Falling back to OpenRouter");
+      result = await callMainAgentOpenRouter(userPrompt);
     }
 
-    console.error("[Agent] Schema validation failed:", result.error);
+    const latencyMs = Date.now() - start;
+    const content = result.content;
+    const tokens = result.tokens;
+
+    const validationResult = validateDecision(content);
+
+    if (validationResult.success) {
+      return { decision: validationResult.data, tokens, latencyMs };
+    }
+
+    console.error("[Agent] Schema validation failed:", validationResult.error);
     return { decision: null, tokens, latencyMs };
   } catch (err) {
-    console.error("[Agent] Groq call failed:", err);
+    console.error("[Agent] Both Groq and OpenRouter failed:", err);
     return { decision: null, tokens: { prompt: 0, completion: 0 }, latencyMs: Date.now() - start };
   }
 }

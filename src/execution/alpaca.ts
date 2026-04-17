@@ -49,7 +49,7 @@ async function alpacaFetch<T>(
 
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  attempts: number = 2,
+  attempts: number = 3,
   baseDelayMs: number = 100
 ): Promise<T> {
   let lastError: Error | null = null;
@@ -59,7 +59,7 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (err) {
       lastError = err as Error;
-      const backoffMs = Math.pow(2, i) * baseDelayMs; // 100ms, 200ms
+      const backoffMs = Math.pow(2, i) * baseDelayMs; // 100ms, 200ms, 400ms
       console.warn(
         `[Alpaca] Attempt ${i + 1}/${attempts} failed, retrying in ${backoffMs}ms:`,
         (err as Error).message

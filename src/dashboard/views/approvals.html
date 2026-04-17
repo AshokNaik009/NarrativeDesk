@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarrativeDesk - Approvals Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #c9d1d9;
+        }
+
+        /* Summary Bar */
+        .summary-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .summary-card-label {
+            font-size: 12px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .summary-card-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+
+        .summary-card.approved .summary-card-value {
+            color: #3fb950;
+        }
+
+        .summary-card.rejected .summary-card-value {
+            color: #f85149;
+        }
+
+        .summary-card.pending .summary-card-value {
+            color: #d29922;
+        }
+
+        /* Approvals List */
+        .approvals-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .approval-item {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .approval-item:hover {
+            background-color: #0d1117;
+            border-color: #58a6ff;
+        }
+
+        .approval-item-header {
+            display: grid;
+            grid-template-columns: 80px 1fr auto;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .countdown-timer {
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px;
+            border-radius: 4px;
+            min-width: 80px;
+        }
+
+        .countdown-timer.danger {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: #f85149;
+        }
+
+        .countdown-timer.warning {
+            background-color: rgba(210, 153, 34, 0.15);
+            color: #d29922;
+        }
+
+        .countdown-timer.safe {
+            background-color: rgba(63, 185, 80, 0.15);
+            color: #3fb950;
+        }
+
+        .approval-headline {
+            font-size: 16px;
+            font-weight: 500;
+            color: #c9d1d9;
+            word-break: break-word;
+        }
+
+        .approval-status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .approval-status-badge.pending {
+            background-color: rgba(210, 153, 34, 0.2);
+            color: #d29922;
+        }
+
+        .approval-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 16px;
+        }
+
+        .approval-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .approval-section-label {
+            font-size: 11px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .approval-section-value {
+            font-size: 13px;
+            color: #c9d1d9;
+            line-height: 1.5;
+        }
+
+        .classification {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            background-color: #58a6ff;
+            color: #0d1117;
+            font-weight: 600;
+            font-size: 11px;
+        }
+
+        .action-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .action-badge.buy {
+            background-color: rgba(63, 185, 80, 0.15);
+            color: #3fb950;
+        }
+
+        .action-badge.sell {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: #f85149;
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-approve {
+            background-color: #3fb950;
+            color: #0d1117;
+        }
+
+        .btn-approve:hover {
+            background-color: #26843b;
+            box-shadow: 0 0 12px rgba(63, 185, 80, 0.3);
+        }
+
+        .btn-reject {
+            background-color: #f85149;
+            color: #fff;
+        }
+
+        .btn-reject:hover {
+            background-color: #da3633;
+            box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
+        }
+
+        .btn-edit {
+            background-color: #58a6ff;
+            color: #0d1117;
+        }
+
+        .btn-edit:hover {
+            background-color: #1f6feb;
+            box-shadow: 0 0 12px rgba(88, 166, 255, 0.3);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 20px;
+            color: #c9d1d9;
+        }
+
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .form-group select,
+        .form-group input {
+            padding: 10px 12px;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-size: 13px;
+            font-family: inherit;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn-submit {
+            background-color: #58a6ff;
+            color: #0d1117;
+            padding: 10px 20px;
+        }
+
+        .btn-submit:hover {
+            background-color: #1f6feb;
+        }
+
+        .btn-cancel {
+            background-color: #21262d;
+            color: #c9d1d9;
+            padding: 10px 20px;
+        }
+
+        .btn-cancel:hover {
+            background-color: #30363d;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .approval-content {
+                grid-template-columns: 1fr;
+            }
+
+            .approval-item-header {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .countdown-timer {
+                width: 100%;
+            }
+
+            .summary-bar {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Loading state */
+        .htmx-request.htmx-settling .approval-item {
+            opacity: 0.6;
+        }
+
+        .htmx-swapping {
+            opacity: 0;
+        }
+
+        .htmx-settling {
+            opacity: 1;
+            transition: opacity 0.2s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Approvals Dashboard</h1>
+        </div>
+
+        <!-- Auto-refreshing approvals section -->
+        <div hx-get="/approvals" hx-trigger="load, every 2s" hx-swap="outerHTML swap:0.5s">
+            <!-- Summary Bar -->
+            <div class="summary-bar">
+                <div class="summary-card pending">
+                    <div class="summary-card-label">Pending</div>
+                    <div class="summary-card-value">0</div>
+                </div>
+                <div class="summary-card approved">
+                    <div class="summary-card-label">Approved</div>
+                    <div class="summary-card-value">0</div>
+                </div>
+                <div class="summary-card rejected">
+                    <div class="summary-card-label">Rejected</div>
+                    <div class="summary-card-value">0</div>
+                </div>
+            </div>
+
+            <!-- Approvals List -->
+            <div class="approvals-list">
+                <div class="approval-item">
+                    <div class="approval-item-header">
+                        <div class="countdown-timer safe">5m 30s</div>
+                        <div>
+                            <div class="approval-headline">Sample approval pending review</div>
+                            <span class="approval-status-badge pending">pending</span>
+                        </div>
+                    </div>
+
+                    <div class="approval-content">
+                        <div class="approval-section">
+                            <div class="approval-section-label">Decision</div>
+                            <div class="approval-section-value">
+                                <span class="classification">act</span>
+                                <div style="margin-top: 8px;">
+                                    This looks like a strong technical setup with good risk/reward...
+                                </div>
+                            </div>
+                        </div>
+                        <div class="approval-section">
+                            <div class="approval-section-label">Action</div>
+                            <div class="approval-section-value">
+                                <div class="action-badge buy">
+                                    <span>BUY</span>
+                                    <span>2.5%</span>
+                                    <span>BTC</span>
+                                </div>
+                                <div style="margin-top: 8px; font-size: 11px; color: #8b949e;">
+                                    Invalidation: Below $95K
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="approval-actions">
+                        <button class="btn btn-approve" onclick="openModal('approve', 'sample-id')">Approve</button>
+                        <button class="btn btn-reject" onclick="openModal('reject', 'sample-id')">Reject</button>
+                        <button class="btn btn-edit" onclick="openModal('edit', 'sample-id')">Edit</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve Modal -->
+    <div id="approveModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Approve Decision</h2>
+            </div>
+            <form hx-post="/approvals/approve" hx-target="#approveModal" hx-on::response="closeModal()" class="modal-body">
+                <input type="hidden" name="approval_id" id="approve_approval_id">
+
+                <div class="form-group">
+                    <label for="approve_tag">Approval Reason</label>
+                    <select id="approve_tag" name="tag" required>
+                        <option value="">Select reason...</option>
+                        <option value="strong_thesis">Strong Thesis</option>
+                        <option value="reasonable_take">Reasonable Take</option>
+                        <option value="curious_experiment">Curious Experiment</option>
+                        <option value="trusting_the_agent">Trusting the Agent</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="approve_comment">Additional Notes (Optional)</label>
+                    <input type="text" id="approve_comment" name="freetext" placeholder="Add any additional notes...">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-submit">Approve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reject Modal -->
+    <div id="rejectModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Reject Decision</h2>
+            </div>
+            <form hx-post="/approvals/reject" hx-target="#rejectModal" hx-on::response="closeModal()" class="modal-body">
+                <input type="hidden" name="approval_id" id="reject_approval_id">
+
+                <div class="form-group">
+                    <label for="reject_tag">Rejection Reason</label>
+                    <select id="reject_tag" name="tag" required>
+                        <option value="">Select reason...</option>
+                        <option value="weak_thesis">Weak Thesis</option>
+                        <option value="already_priced_in">Already Priced In</option>
+                        <option value="wrong_coin">Wrong Coin</option>
+                        <option value="wrong_timing">Wrong Timing</option>
+                        <option value="size_too_large">Size Too Large</option>
+                        <option value="news_not_credible">News Not Credible</option>
+                        <option value="portfolio_constraint">Portfolio Constraint</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="reject_comment">Additional Notes (Optional)</label>
+                    <input type="text" id="reject_comment" name="freetext" placeholder="Add any additional notes...">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-submit">Reject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Edit Decision</h2>
+            </div>
+            <form hx-post="/approvals/edit" hx-target="#editModal" hx-on::response="closeModal()" class="modal-body">
+                <input type="hidden" name="approval_id" id="edit_approval_id">
+
+                <div class="form-group">
+                    <label for="edit_tag">Tag</label>
+                    <select id="edit_tag" name="tag" required>
+                        <option value="">Select tag...</option>
+                        <option value="strong_thesis">Strong Thesis</option>
+                        <option value="reasonable_take">Reasonable Take</option>
+                        <option value="curious_experiment">Curious Experiment</option>
+                        <option value="trusting_the_agent">Trusting the Agent</option>
+                        <option value="weak_thesis">Weak Thesis</option>
+                        <option value="already_priced_in">Already Priced In</option>
+                        <option value="wrong_coin">Wrong Coin</option>
+                        <option value="wrong_timing">Wrong Timing</option>
+                        <option value="size_too_large">Size Too Large</option>
+                        <option value="news_not_credible">News Not Credible</option>
+                        <option value="portfolio_constraint">Portfolio Constraint</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_comment">Freetext</label>
+                    <input type="text" id="edit_comment" name="freetext" placeholder="Add freetext notes...">
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_size">New Size %</label>
+                    <input type="number" id="edit_size" name="size_pct" step="0.1" min="0.1" max="10" placeholder="Enter new size percentage...">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-submit">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // HTMX Configuration
+        htmx.config.defaultIndicatorStyle = "spinner";
+        htmx.config.refreshOnHistoryMiss = true;
+
+        // Modal management
+        function openModal(type, approvalId) {
+            const modals = {
+                'approve': 'approveModal',
+                'reject': 'rejectModal',
+                'edit': 'editModal'
+            };
+
+            const modalId = modals[type];
+            const modal = document.getElementById(modalId);
+
+            if (modal) {
+                modal.classList.add('active');
+                // Set the approval ID in the hidden input
+                const hiddenInput = modal.querySelector(`#${type}_approval_id`);
+                if (hiddenInput) {
+                    hiddenInput.value = approvalId;
+                }
+            }
+        }
+
+        function closeModal() {
+            const modals = document.querySelectorAll('.modal-overlay');
+            modals.forEach(modal => modal.classList.remove('active'));
+        }
+
+        // Close modal when clicking outside
+        document.querySelectorAll('.modal-overlay').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+        });
+
+        // HTMX header configuration for X-Dashboard-Secret
+        document.body.addEventListener('htmx:configRequest', function(detail) {
+            // Add X-Dashboard-Secret header to all HTMX requests
+            // In production, this should come from a secure source
+            detail.headers['X-Dashboard-Secret'] = 'your-secret-key-here';
+        });
+
+        // Auto-update countdown timers
+        function updateCountdownTimers() {
+            document.querySelectorAll('.countdown-timer').forEach(timer => {
+                const text = timer.textContent.trim();
+                const match = text.match(/(\d+)m\s*(\d+)s/);
+                if (match) {
+                    const minutes = parseInt(match[1]);
+                    const seconds = parseInt(match[2]);
+                    const totalSeconds = minutes * 60 + seconds;
+
+                    // Remove existing classes
+                    timer.classList.remove('danger', 'warning', 'safe');
+
+                    // Add appropriate class based on time remaining
+                    if (totalSeconds < 300) { // < 5 min
+                        timer.classList.add('danger');
+                    } else if (totalSeconds < 600) { // < 10 min
+                        timer.classList.add('warning');
+                    } else {
+                        timer.classList.add('safe');
+                    }
+                }
+            });
+        }
+
+        // Run on page load
+        document.addEventListener('htmx:load', updateCountdownTimers);
+        updateCountdownTimers();
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

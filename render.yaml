@@ -1,0 +1,75 @@
+services:
+  - type: web
+    name: narrativedesk-web
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:web
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: GROQ_API_KEY
+        scope: project
+      - key: GOOGLE_API_KEY
+        scope: project
+      - key: GOOGLE_API_KEY_SECONDARY
+        scope: project
+      - key: OPENROUTER_API_KEY
+        scope: project
+      - key: DATABASE_URL
+        scope: project
+      - key: FINHUB_API_KEY
+        scope: project
+      - key: ALPACA_API_KEY
+        scope: project
+      - key: ALPACA_API_SECRET
+        scope: project
+      - key: DASHBOARD_SECRET
+        scope: project
+    healthCheckPath: /health
+    healthCheckInterval: 300
+
+  - type: background_worker
+    name: narrativedesk-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GROQ_API_KEY
+        scope: project
+      - key: GOOGLE_API_KEY
+        scope: project
+      - key: GOOGLE_API_KEY_SECONDARY
+        scope: project
+      - key: OPENROUTER_API_KEY
+        scope: project
+      - key: DATABASE_URL
+        scope: project
+      - key: FINHUB_API_KEY
+        scope: project
+      - key: ALPACA_API_KEY
+        scope: project
+      - key: ALPACA_API_SECRET
+        scope: project
+      - key: BINANCE_WS_URL
+        value: wss://stream.binance.com:9443
+
+databases:
+  - name: narrativedesk-db
+    plan: starter
+    ipAllowList: []
+
+envVarGroups:
+  - name: production
+    displayName: Production
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info

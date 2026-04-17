@@ -1,21 +1,34 @@
 import { config } from "./config.js";
 import { initDb, query } from "./db/client.js";
-import { fetchCryptoNews, persistEvent, persistFilterDecision } from "./ingestion/finnhub.js";
+import { fetchCryptoNews, persistEvent, persistFilterDecision, fetchQuote } from "./ingestion/finnhub.js";
 import { startBinanceWs } from "./ingestion/binance.js";
 import { filterEvent } from "./filter/EventFilter.js";
 import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation } from "./agent/llm.js";
 import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
 import { evaluateGuardrails } from "./guardrails/GuardrailEngine.js";
+import { evaluateInvalidation, MarketState } from "./guardrails/InvalidationEvaluator.js";
+import { queryPortfolioState, executeApprovedTrade, closePosition, getOrderStatus } from "./execution/alpaca.js";
 import { Event, TradeHistoryEntry, PortfolioState } from "./types.js";
 
 // Recent events buffer for dedup/rate-limiting
 const recentEvents: Event[] = [];
 const RECENT_BUFFER_SIZE = 100;
 
+// Price cache for invalidation watcher
+const priceCache: Record<string, number> = {};
+
 function addToRecent(event: Event) {
   recentEvents.push(event);
   if (recentEvents.length > RECENT_BUFFER_SIZE) {
     recentEvents.shift();
+  }
+
+  // Update price cache if this is a price event
+  if (event.type === "price" && event.symbol) {
+    const payload = event.rawPayload as any;
+    if (payload.price) {
+      priceCache[event.symbol.toUpperCase()] = payload.price;
+    }
   }
 }
 
@@ -38,26 +51,6 @@ async function getTradeHistory(hours: number = 24): Promise<TradeHistoryEntry[]>
   }
 }
 
-// Helper: Get portfolio state from DB. For now, returns a minimal stub.
-// Task 3.1 will implement queryPortfolioState in src/execution/alpaca.js
-async function queryPortfolioState(): Promise<PortfolioState> {
-  try {
-    // Stub: paper trading with no positions yet
-    // Real implementation will come from Task 3.1
-    return {
-      cash: 100000,
-      totalValue: 100000,
-      positions: [],
-    };
-  } catch (err) {
-    console.error("[Worker] Error querying portfolio state:", err);
-    return {
-      cash: 100000,
-      totalValue: 100000,
-      positions: [],
-    };
-  }
-}
 
 // Helper: Log guardrail decision to DB (gracefully handles missing table)
 async function logGuardrailDecision(
@@ -187,7 +180,34 @@ async function processEvent(event: Event) {
         return;
       }
 
-      // TODO Phase 4: create pending approval
+      // Phase 4: Create pending approval if guardrail passes
+      // (decisionId from earlier query is already available)
+      if (decisionResult.rows.length > 0) {
+        const decisionId = decisionResult.rows[0].id;
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min from now
+
+        try {
+          const approvalResult = await query(
+            `INSERT INTO pending_approvals (decision_id, status, expires_at, created_at)
+             VALUES ($1, $2, $3, NOW())
+             RETURNING id`,
+            [decisionId, 'pending', expiresAt]
+          );
+
+          if (approvalResult.rows.length > 0) {
+            const approvalId = approvalResult.rows[0].id;
+            console.log(
+              `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 15m) for decision ${decisionId.slice(0, 8)}`
+            );
+          }
+        } catch (err: any) {
+          if (err.code === "42P01" || err.message?.includes("does not exist")) {
+            console.warn("[Worker] pending_approvals table not yet created, logging to console only");
+          } else {
+            console.error("[Worker] Error creating pending approval:", err);
+          }
+        }
+      }
     }
   } catch (err) {
     console.error("[Worker] Error processing event:", err);
@@ -202,6 +222,127 @@ async function pollNews() {
 
   for (const event of events) {
     await processEvent(event);
+  }
+}
+
+// Execution loop: monitors approved trades and executes them
+async function executionLoop() {
+  try {
+    // Query for approved trades that haven't been executed yet
+    const approvalResult = await query(
+      `SELECT pa.id, pa.decision_id, pd.side, pd.coin, pd.size_pct, pa.created_at
+       FROM pending_approvals pa
+       JOIN proposed_decisions pd ON pa.decision_id = pd.id
+       WHERE pa.status = 'approved'
+       AND pa.created_at < NOW() - INTERVAL '30 seconds'
+       ORDER BY pa.created_at ASC
+       LIMIT 5`
+    );
+
+    for (const approval of approvalResult.rows) {
+      try {
+        console.log(`[Worker] Executing approved trade ${approval.id.slice(0, 8)}: ${approval.side.toUpperCase()} ${approval.size_pct}% ${approval.coin}`);
+
+        const execResult = await executeApprovedTrade({
+          id: approval.id,
+          decision_id: approval.decision_id,
+          action: {
+            side: approval.side,
+            coin: approval.coin,
+            size_pct: approval.size_pct,
+          },
+        });
+
+        // Insert executed trade record
+        await query(
+          `INSERT INTO executed_trades (approval_id, side, coin, size_pct, entry_price, invalidation, created_at)
+           SELECT $1, pd.side, pd.coin, pd.size_pct, $2, pd.invalidation, NOW()
+           FROM proposed_decisions pd
+           WHERE pd.id = $3`,
+          [approval.id, execResult.entry_price, approval.decision_id]
+        );
+
+        // Update approval status to 'executed'
+        await query(
+          `UPDATE pending_approvals SET status = 'executed', resolved_at = NOW() WHERE id = $1`,
+          [approval.id]
+        );
+
+        console.log(`[Worker] Trade executed: ${approval.id.slice(0, 8)} at ${execResult.entry_price} (order: ${execResult.alpaca_order_id.slice(0, 8)})`);
+      } catch (err) {
+        console.error(`[Worker] Execution failed for approval ${approval.id.slice(0, 8)}:`, (err as Error).message);
+        // Don't update status on failure; will retry next loop
+      }
+    }
+  } catch (err) {
+    console.error("[Worker] Execution loop error:", err);
+  }
+}
+
+// Invalidation watcher: monitors open trades for invalidation triggers
+async function invalidationWatcher() {
+  try {
+    // Query for open trades
+    const tradesResult = await query(
+      `SELECT et.id, et.approval_id, et.side, et.coin, et.entry_price, et.invalidation, pd.decision_id
+       FROM executed_trades et
+       JOIN pending_approvals pa ON et.approval_id = pa.id
+       JOIN proposed_decisions pd ON pa.decision_id = pd.id
+       WHERE et.closed_at IS NULL
+       ORDER BY et.created_at ASC
+       LIMIT 10`
+    );
+
+    // Build market state from recent prices
+    const marketState: MarketState = {
+      prices: priceCache,
+      timestamp: new Date(),
+    };
+
+    for (const trade of tradesResult.rows) {
+      if (!marketState.prices[trade.coin.toUpperCase()]) {
+        // Try to fetch fresh price
+        try {
+          const price = await fetchQuote(trade.coin);
+          if (price) {
+            marketState.prices[trade.coin.toUpperCase()] = price;
+          }
+        } catch (err) {
+          console.warn(`[Worker] Could not fetch price for ${trade.coin}:`, (err as Error).message);
+        }
+      }
+
+      const invalidationResult = evaluateInvalidation(
+        trade.invalidation,
+        trade.entry_price,
+        trade.coin,
+        marketState
+      );
+
+      if (invalidationResult.triggered) {
+        try {
+          console.log(`[Worker] Invalidation triggered for ${trade.coin}: ${invalidationResult.reason}`);
+
+          // Close the position
+          await closePosition(`${trade.coin.toUpperCase()}USDT`, trade.side);
+
+          // Update executed_trades record
+          const closePrice = marketState.prices[trade.coin.toUpperCase()] || trade.entry_price;
+          await query(
+            `UPDATE executed_trades
+             SET closed_at = NOW(), close_price = $1, close_reason = $2
+             WHERE id = $3`,
+            [closePrice, invalidationResult.reason, trade.id]
+          );
+
+          console.log(`[Worker] Trade closed: ${trade.id.slice(0, 8)} at ${closePrice} | reason: ${invalidationResult.reason}`);
+        } catch (err) {
+          console.error(`[Worker] Failed to close trade ${trade.id.slice(0, 8)}:`, (err as Error).message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Worker] Invalidation watcher error:", err);
   }
 }
 
@@ -228,9 +369,10 @@ async function main() {
   await ensureThesisExists();
   console.log("[Worker] Thesis initialized");
 
-  // Start Finnhub polling
+  // Start Finnhub polling (every 60 seconds)
   await pollNews();
   setInterval(pollNews, config.finnhubPollIntervalMs);
+  console.log("[Worker] Finnhub polling started (every 60s)");
 
   // Start Binance WebSocket for price ticks
   startBinanceWs(async (event) => {
@@ -246,11 +388,20 @@ async function main() {
     }
     await processEvent(event);
   });
+  console.log("[Worker] Binance WebSocket connected");
+
+  // Start execution loop (every 10 seconds)
+  setInterval(executionLoop, 10 * 1000);
+  console.log("[Worker] Execution loop started (every 10s)");
+
+  // Start invalidation watcher loop (every 30 seconds)
+  setInterval(invalidationWatcher, 30 * 1000);
+  console.log("[Worker] Invalidation watcher started (every 30s)");
 
   // Self-ping
   startSelfPing();
 
-  console.log("[Worker] Running. Polling Finnhub every 60s, Binance WS connected.");
+  console.log("[Worker] All loops running. Ready to process events.");
 }
 
 main().catch((err) => {

@@ -131,6 +131,17 @@ CREATE TABLE IF NOT EXISTS guardrail_decisions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Error logging for monitoring and debugging
+CREATE TABLE IF NOT EXISTS error_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  service VARCHAR(100) NOT NULL,
+  error_type VARCHAR(100) NOT NULL,
+  message TEXT NOT NULL,
+  context JSONB,
+  resolved BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
@@ -141,3 +152,5 @@ CREATE INDEX IF NOT EXISTS idx_pending_approvals_expires ON pending_approvals(ex
 CREATE INDEX IF NOT EXISTS idx_executed_trades_coin ON executed_trades(coin);
 CREATE INDEX IF NOT EXISTS idx_executed_trades_closed ON executed_trades(closed_at);
 CREATE INDEX IF NOT EXISTS idx_guardrail_decisions_decision ON guardrail_decisions(decision_id);
+CREATE INDEX IF NOT EXISTS idx_error_logs_service ON error_logs(service);
+CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);
