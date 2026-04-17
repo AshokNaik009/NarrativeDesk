@@ -5,7 +5,7 @@
   "scripts": {
     "dev:worker": "tsx watch src/worker.ts",
     "dev:web": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/dashboard/views && cp -r src/dashboard/views/*.html dist/dashboard/views/ 2>/dev/null || true",
     "start:worker": "node dist/worker.js",
     "start:web": "node dist/server.js",
     "db:init": "tsx src/db/init.ts",

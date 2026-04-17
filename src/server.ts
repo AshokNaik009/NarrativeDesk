@@ -4,6 +4,11 @@ import { initDb, query } from "./db/client.js";
 import { transition } from "./hitl/ApprovalStateMachine.js";
 import { ApprovalStatus } from "./types.js";
 import { getHealth, getMetrics } from "./utils/health.js";
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json());
@@ -45,55 +50,34 @@ app.get("/metrics", async (_req, res) => {
   }
 });
 
-// Dashboard home — placeholder until Phase 4
-app.get("/", async (_req, res) => {
+// Dashboard home — HTMX approvals dashboard
+app.get("/", (_req, res) => {
   try {
-    const pendingResult = await query(
-      `SELECT COUNT(*) as count FROM pending_approvals WHERE status = 'pending'`
-    );
-    const eventCount = await query(`SELECT COUNT(*) as count FROM events`);
-    const decisionCount = await query(`SELECT COUNT(*) as count FROM proposed_decisions`);
-
-    res.send(`
+    // Serve the HTMX dashboard HTML
+    const dashboardPath = join(__dirname, "dashboard", "views", "approvals.html");
+    const html = readFileSync(dashboardPath, "utf-8");
+    res.send(html);
+  } catch (err) {
+    // Fallback: serve stats if dashboard file not found
+    res.status(500).send(`
       <!DOCTYPE html>
       <html>
       <head>
         <title>NarrativeDesk</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
           body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #0d1117; color: #c9d1d9; }
           h1 { color: #58a6ff; }
           .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
-          .stat { font-size: 2rem; font-weight: bold; color: #58a6ff; }
-          .label { color: #8b949e; font-size: 0.9rem; }
-          .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         </style>
       </head>
       <body>
         <h1>NarrativeDesk</h1>
-        <p>Real-time narrative-driven crypto paper-trading agent</p>
-        <div class="grid">
-          <div class="card">
-            <div class="stat">${pendingResult.rows[0].count}</div>
-            <div class="label">Pending Approvals</div>
-          </div>
-          <div class="card">
-            <div class="stat">${eventCount.rows[0].count}</div>
-            <div class="label">Events Ingested</div>
-          </div>
-          <div class="card">
-            <div class="stat">${decisionCount.rows[0].count}</div>
-            <div class="label">Decisions Made</div>
-          </div>
-        </div>
         <div class="card">
-          <p class="label">Dashboard with HTMX approval UI coming in Phase 4</p>
+          <p>Dashboard loading... Check /health for status</p>
         </div>
       </body>
       </html>
     `);
-  } catch (err) {
-    res.status(500).send(`DB error: ${err}`);
   }
 });
 
