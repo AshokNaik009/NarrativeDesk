@@ -122,6 +122,15 @@ CREATE TABLE IF NOT EXISTS outcome_prices (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Guardrail evaluations
+CREATE TABLE IF NOT EXISTS guardrail_decisions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  decision_id UUID NOT NULL REFERENCES proposed_decisions(id),
+  allowed BOOLEAN NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
@@ -131,3 +140,4 @@ CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals(sta
 CREATE INDEX IF NOT EXISTS idx_pending_approvals_expires ON pending_approvals(expires_at);
 CREATE INDEX IF NOT EXISTS idx_executed_trades_coin ON executed_trades(coin);
 CREATE INDEX IF NOT EXISTS idx_executed_trades_closed ON executed_trades(closed_at);
+CREATE INDEX IF NOT EXISTS idx_guardrail_decisions_decision ON guardrail_decisions(decision_id);

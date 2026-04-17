@@ -5,7 +5,8 @@ import { startBinanceWs } from "./ingestion/binance.js";
 import { filterEvent } from "./filter/EventFilter.js";
 import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation } from "./agent/llm.js";
 import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
-import { Event } from "./types.js";
+import { evaluateGuardrails } from "./guardrails/GuardrailEngine.js";
+import { Event, TradeHistoryEntry, PortfolioState } from "./types.js";
 
 // Recent events buffer for dedup/rate-limiting
 const recentEvents: Event[] = [];
@@ -15,6 +16,68 @@ function addToRecent(event: Event) {
   recentEvents.push(event);
   if (recentEvents.length > RECENT_BUFFER_SIZE) {
     recentEvents.shift();
+  }
+}
+
+// Helper: Get trade history from executed_trades table for the last N hours
+async function getTradeHistory(hours: number = 24): Promise<TradeHistoryEntry[]> {
+  try {
+    const result = await query(
+      `SELECT coin, created_at as "executedAt"
+       FROM executed_trades
+       WHERE created_at > NOW() - INTERVAL '${hours} hours'
+       ORDER BY created_at DESC`
+    );
+    return result.rows.map((row) => ({
+      coin: row.coin,
+      executedAt: new Date(row.executedAt),
+    }));
+  } catch (err) {
+    console.error("[Worker] Error fetching trade history:", err);
+    return [];
+  }
+}
+
+// Helper: Get portfolio state from DB. For now, returns a minimal stub.
+// Task 3.1 will implement queryPortfolioState in src/execution/alpaca.js
+async function queryPortfolioState(): Promise<PortfolioState> {
+  try {
+    // Stub: paper trading with no positions yet
+    // Real implementation will come from Task 3.1
+    return {
+      cash: 100000,
+      totalValue: 100000,
+      positions: [],
+    };
+  } catch (err) {
+    console.error("[Worker] Error querying portfolio state:", err);
+    return {
+      cash: 100000,
+      totalValue: 100000,
+      positions: [],
+    };
+  }
+}
+
+// Helper: Log guardrail decision to DB (gracefully handles missing table)
+async function logGuardrailDecision(
+  decisionId: string,
+  allowed: boolean,
+  reason: string
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO guardrail_decisions (decision_id, allowed, reason, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [decisionId, allowed, reason]
+    );
+  } catch (err: any) {
+    // Gracefully handle missing table (Task 3.3 will create it)
+    if (err.code === "42P01" || err.message?.includes("does not exist")) {
+      console.warn("[Worker] guardrail_decisions table not yet created, logging to console only");
+    } else {
+      console.error("[Worker] Error logging guardrail decision:", err);
+    }
   }
 }
 
@@ -88,8 +151,44 @@ async function processEvent(event: Event) {
       console.log(`[Worker] Thesis updated`);
     }
 
-    // TODO Phase 3: run guardrails on agent output
-    // TODO Phase 4: create pending approval if "act"
+    // Phase 3: Run guardrails if decision is "act"
+    if (d.classification === "act" && d.action) {
+      const portfolio = await queryPortfolioState();
+      const tradeHistory = await getTradeHistory(24);
+
+      const guardrailResult = evaluateGuardrails(d.action, portfolio, tradeHistory);
+
+      console.log(
+        `[Worker] Guardrail check: ${guardrailResult.allowed ? "ALLOWED" : "BLOCKED"} - ${guardrailResult.reason}`
+      );
+
+      // Get the decision_id from proposed_decisions table
+      const decisionResult = await query(
+        `SELECT id FROM proposed_decisions WHERE agent_invocation_id = $1`,
+        [invocationId]
+      );
+
+      if (decisionResult.rows.length > 0) {
+        const decisionId = decisionResult.rows[0].id;
+
+        // Log guardrail decision to DB
+        await logGuardrailDecision(decisionId, guardrailResult.allowed, guardrailResult.reason);
+
+        // Log to console with portfolio summary
+        const portfolioSummary = `cash: $${portfolio.cash.toFixed(0)}, positions: ${portfolio.positions.length}`;
+        console.log(
+          `[Worker] Guardrail decision logged | decision_id: ${decisionId.slice(0, 8)} | portfolio: [${portfolioSummary}]`
+        );
+      }
+
+      // If guardrails rejected, exit early (don't create pending approval)
+      if (!guardrailResult.allowed) {
+        console.log(`[Worker] Trade blocked by guardrails, not creating approval`);
+        return;
+      }
+
+      // TODO Phase 4: create pending approval
+    }
   } catch (err) {
     console.error("[Worker] Error processing event:", err);
   }
