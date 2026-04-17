@@ -142,6 +142,7 @@ async function checkAlpaca(): Promise<CheckResult> {
   if (!config.alpacaApiKey || config.alpacaApiKey === "your_alpaca_key_here") {
     return { service: "Alpaca Paper Trading", status: "FAIL", latencyMs: 0, error: "API key not configured" };
   }
+  // Note: Alpaca API requires authentication; this checks endpoint availability and credentials validity
   try {
     const res = await withTimeout(
       fetch("https://paper-api.alpaca.markets/v2/account", {
