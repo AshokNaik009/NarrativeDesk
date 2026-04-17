@@ -5,6 +5,7 @@ export const config = {
   // LLM
   groqApiKey: process.env.GROQ_API_KEY!,
   googleApiKey: process.env.GOOGLE_API_KEY!,
+  googleApiKeySecondary: process.env.GOOGLE_API_KEY_SECONDARY,
   openRouterApiKey: process.env.OPENROUTER_API_KEY!,
 
   // Database

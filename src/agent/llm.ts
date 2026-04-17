@@ -92,11 +92,27 @@ export async function invokeCredibilityAgent(headline: string): Promise<{
   const start = Date.now();
 
   try {
-    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
-      generationConfig: { temperature: 0, responseMimeType: "application/json" },
-    });
+    let model = genai.getGenerativeModel({ model: GEMINI_MODEL });
+    let result;
+    try {
+      result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
+        generationConfig: { temperature: 0, responseMimeType: "application/json" },
+      });
+    } catch (err: any) {
+      // Fallback to secondary key if primary is rate-limited
+      if (config.googleApiKeySecondary && (err.message?.includes("429") || err.message?.includes("quota"))) {
+        console.warn("[Credibility] Primary Gemini key rate-limited, switching to secondary");
+        const genaiSecondary = new GoogleGenerativeAI(config.googleApiKeySecondary);
+        model = genaiSecondary.getGenerativeModel({ model: GEMINI_MODEL });
+        result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
+          generationConfig: { temperature: 0, responseMimeType: "application/json" },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     const latencyMs = Date.now() - start;
     const text = result.response.text();
