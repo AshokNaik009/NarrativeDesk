@@ -20,9 +20,20 @@ export async function query<T extends pg.QueryResultRow = any>(
 }
 
 export async function initDb(): Promise<void> {
-  const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
-  await pool.query(schema);
-  console.log("[DB] Schema initialized");
+  try {
+    // Try to read schema.sql (exists in development, not in compiled production build)
+    const schemaPath = join(__dirname, "schema.sql");
+    const schema = readFileSync(schemaPath, "utf-8");
+    await pool.query(schema);
+    console.log("[DB] Schema initialized from file");
+  } catch (err: any) {
+    // If schema.sql doesn't exist (production after build), assume already initialized
+    if (err.code === "ENOENT") {
+      console.log("[DB] Schema file not found (production deployment), skipping initialization");
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function getPool(): Promise<pg.Pool> {
