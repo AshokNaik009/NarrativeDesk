@@ -4,6 +4,7 @@
     // File Layout
     "rootDir": "src",
     "outDir": "dist",
+    "skipLibCheck": true,
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
@@ -39,9 +40,10 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
 
     "moduleResolution": "nodenext",
-    "esModuleInterop": true,
-  }
+    "esModuleInterop": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "vitest.config.ts", "run-schema.js"]
 }
