@@ -52,10 +52,11 @@ Implement the main agent and credibility sub-agent.
 - [x] Credibility sub-agent via Gemini 2.0 Flash
 - [x] DecisionSchemaValidator module (pure) (`src/filter/DecisionSchemaValidator.ts`)
 - [x] Agent invocation logging function
-- [ ] Thesis file manager (read/write/diff with Postgres sync)
-- [ ] Unit tests for DecisionSchemaValidator (~12-15 tests)
+- [x] Thesis file manager (read/write/diff with Postgres sync) (`src/agent/thesis.ts`)
+- [x] Worker pipeline wired: event → credibility → main agent → decision persistence
+- [ ] Unit tests for DecisionSchemaValidator (~12-15 tests) — deferred to Phase 7
 
-**Status:** ~60% complete (LLM calls built, thesis manager and tests missing)
+**Status:** ~95% complete (all core logic done, tests deferred to Phase 7)
 
 ---
 
@@ -126,12 +127,18 @@ Wire all phases together into a running system.
 Ensure reliability before going live.
 
 **Deliverables:**
-- [ ] Unit tests for all 5 pure modules (EventFilter, DecisionSchemaValidator, GuardrailEngine, InvalidationEvaluator, ApprovalStateMachine)
+- [x] Unit tests for all 5 pure modules (EventFilter, DecisionSchemaValidator, GuardrailEngine, InvalidationEvaluator, ApprovalStateMachine)
+  - EventFilter: 15 tests (`src/filter/__tests__/EventFilter.test.ts`)
+  - DecisionSchemaValidator: 12 tests (`src/filter/__tests__/DecisionSchemaValidator.test.ts`)
+  - GuardrailEngine: 15 tests (`src/guardrails/__tests__/GuardrailEngine.test.ts`)
+  - InvalidationEvaluator: 10 tests (`src/guardrails/__tests__/InvalidationEvaluator.test.ts`)
+  - ApprovalStateMachine: 12 tests (`src/hitl/__tests__/ApprovalStateMachine.test.ts`)
+  - Total: 64 tests written, pending vitest setup fix
 - [ ] Integration tests: Finnhub adapter, dashboard routes
 - [ ] Rate-limit token bucket for LLM clients
 - [ ] Groq → OpenRouter fallback on rate limit
 
-**Status:** Not started
+**Status:** ~50% complete (all unit tests written, test runner setup pending)
 
 ---
 
@@ -161,10 +168,10 @@ Get the system running on Render free tier.
 |-------|--------|-------------|
 | 0 | **DONE** | — |
 | 1 | **DONE** | Tests deferred |
-| 2 | ~60% | Need thesis manager |
-| 3 | ~40% | Alpaca keys for portfolio |
+| 2 | **DONE** | — |
+| 3 | ~40% | Alpaca keys for portfolio state query |
 | 4 | ~20% | Need Express + HTMX dashboard |
 | 5 | 0% | Blocked on Alpaca keys |
-| 6 | 0% | Needs all above |
-| 7 | 0% | Needs all above |
-| 8 | ~10% | Needs all above |
+| 6 | 0% | Need Phase 3 guardrails + Phase 4 approval UI |
+| 7 | ~50% | Test runner setup (vitest rolldown native binding issue) |
+| 8 | ~10% | Needs all phases complete |
