@@ -1,8 +1,10 @@
 import { config } from "./config.js";
-import { initDb } from "./db/client.js";
+import { initDb, query } from "./db/client.js";
 import { fetchCryptoNews, persistEvent, persistFilterDecision } from "./ingestion/finnhub.js";
 import { startBinanceWs } from "./ingestion/binance.js";
 import { filterEvent } from "./filter/EventFilter.js";
+import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation } from "./agent/llm.js";
+import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
 import { Event } from "./types.js";
 
 // Recent events buffer for dedup/rate-limiting
@@ -34,7 +36,58 @@ async function processEvent(event: Event) {
 
     console.log(`[Worker] Event passed filter: ${event.type} | ${event.headline?.slice(0, 60) || event.symbol}`);
 
-    // TODO Phase 2: invoke main agent here
+    // Phase 2: invoke credibility sub-agent (news only), then main agent
+    let credibilityRating = undefined;
+    if (event.type === "news" && event.headline) {
+      const credResult = await invokeCredibilityAgent(event.headline);
+      credibilityRating = credResult.credibility ?? undefined;
+      if (credResult.credibility) {
+        console.log(`[Worker] Credibility: ${credResult.credibility.rating}/5 (${credResult.latencyMs}ms)`);
+      }
+    }
+
+    const thesis = await getCurrentThesis();
+    const currentThesis = thesis?.content || "No thesis yet. Observing market.";
+
+    const agentResult = await invokeMainAgent(
+      event,
+      currentThesis,
+      "Portfolio: paper trading, no open positions (Alpaca not connected)",
+      credibilityRating
+    );
+
+    // Log invocation
+    const invocationId = await logAgentInvocation(
+      eventId,
+      "llama-3.3-70b-versatile",
+      agentResult.tokens,
+      agentResult.latencyMs,
+      agentResult.decision !== null,
+      agentResult.decision
+    );
+
+    if (!agentResult.decision) {
+      console.log(`[Worker] Agent returned no valid decision (${agentResult.latencyMs}ms)`);
+      return;
+    }
+
+    const d = agentResult.decision;
+    console.log(`[Worker] Agent decision: ${d.classification} | ${d.reasoning.slice(0, 80)}`);
+
+    // Persist proposed decision
+    await query(
+      `INSERT INTO proposed_decisions (agent_invocation_id, classification, reasoning, thesis_delta, side, coin, size_pct, invalidation, time_horizon)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [invocationId, d.classification, d.reasoning, d.thesis_delta, d.action?.side, d.action?.coin, d.action?.size_pct, d.action?.invalidation, d.action?.time_horizon]
+    );
+
+    // Update thesis if there's a delta
+    if (d.thesis_delta && d.thesis_delta !== "no change") {
+      const newThesis = `${currentThesis}\n\n[${new Date().toISOString()}] ${d.thesis_delta}`;
+      await writeThesis(newThesis);
+      console.log(`[Worker] Thesis updated`);
+    }
+
     // TODO Phase 3: run guardrails on agent output
     // TODO Phase 4: create pending approval if "act"
   } catch (err) {
@@ -71,6 +124,10 @@ async function main() {
 
   // Init DB
   await initDb();
+
+  // Ensure thesis exists
+  await ensureThesisExists();
+  console.log("[Worker] Thesis initialized");
 
   // Start Finnhub polling
   await pollNews();
