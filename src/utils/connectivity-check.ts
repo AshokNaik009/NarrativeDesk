@@ -42,14 +42,14 @@ async function checkGemini(): Promise<CheckResult> {
   const start = Date.now();
   try {
     const genai = new GoogleGenerativeAI(config.googleApiKey);
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genai.getGenerativeModel({ model: "gemini-flash-latest" });
     await withTimeout(
       model.generateContent({ contents: [{ role: "user", parts: [{ text: "Say OK" }] }] }),
       10000
     );
-    return { service: "Gemini (2.0-flash)", status: "OK", latencyMs: Date.now() - start };
+    return { service: "Gemini (flash-latest)", status: "OK", latencyMs: Date.now() - start };
   } catch (err: any) {
-    return { service: "Gemini (2.0-flash)", status: "FAIL", latencyMs: Date.now() - start, error: err.message?.slice(0, 100) };
+    return { service: "Gemini (flash-latest)", status: "FAIL", latencyMs: Date.now() - start, error: err.message?.slice(0, 100) };
   }
 }
 

@@ -38,6 +38,8 @@ const CREDIBILITY_SYSTEM_PROMPT = `Rate this crypto news item for likely market 
 
 Respond with ONLY valid JSON: {"rating": <1-5>, "reasoning": "<brief explanation>"}`;
 
+const GEMINI_MODEL = "gemini-flash-latest"; // Use flash-latest for best compatibility
+
 export async function invokeMainAgent(
   event: { headline?: string; symbol?: string; rawPayload: Record<string, unknown> },
   currentThesis: string,
@@ -90,7 +92,7 @@ export async function invokeCredibilityAgent(headline: string): Promise<{
   const start = Date.now();
 
   try {
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
       generationConfig: { temperature: 0, responseMimeType: "application/json" },
