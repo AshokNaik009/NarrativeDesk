@@ -145,12 +145,34 @@ export async function invokeMainAgent(
   }
 }
 
+// Credibility agent rate-limit tracking
+let credibilityRateLimitedUntil = 0;
+let credibilityCallCount = 0;
+const CREDIBILITY_MAX_PER_CYCLE = 5; // Max credibility calls per poll cycle (preserve free tier quota)
+const CREDIBILITY_COOLDOWN_MS = 60_000; // Cooldown after hitting rate limit
+
+export function resetCredibilityCycleCount(): void {
+  credibilityCallCount = 0;
+}
+
 export async function invokeCredibilityAgent(headline: string): Promise<{
   credibility: Credibility | null;
   tokens: { prompt: number; completion: number };
   latencyMs: number;
 }> {
   const start = Date.now();
+
+  // Skip if rate-limited or over per-cycle budget
+  if (Date.now() < credibilityRateLimitedUntil) {
+    console.log(`[Credibility] Skipped — rate-limited for ${Math.ceil((credibilityRateLimitedUntil - Date.now()) / 1000)}s more`);
+    return { credibility: null, tokens: { prompt: 0, completion: 0 }, latencyMs: 0 };
+  }
+  if (credibilityCallCount >= CREDIBILITY_MAX_PER_CYCLE) {
+    console.log(`[Credibility] Skipped — ${CREDIBILITY_MAX_PER_CYCLE} calls this cycle (quota preservation)`);
+    return { credibility: null, tokens: { prompt: 0, completion: 0 }, latencyMs: 0 };
+  }
+
+  credibilityCallCount++;
 
   try {
     let model = genai.getGenerativeModel({ model: GEMINI_MODEL });
@@ -161,15 +183,33 @@ export async function invokeCredibilityAgent(headline: string): Promise<{
         generationConfig: { temperature: 0, responseMimeType: "application/json" },
       });
     } catch (err: any) {
-      // Fallback to secondary key if primary is rate-limited
-      if (config.googleApiKeySecondary && (err.message?.includes("429") || err.message?.includes("quota"))) {
-        console.warn("[Credibility] Primary Gemini key rate-limited, switching to secondary");
+      const isRateLimit = err.message?.includes("429") || err.message?.includes("quota");
+
+      // Try secondary key
+      if (isRateLimit && config.googleApiKeySecondary) {
+        console.warn("[Credibility] Primary key rate-limited, trying secondary");
         const genaiSecondary = new GoogleGenerativeAI(config.googleApiKeySecondary);
         model = genaiSecondary.getGenerativeModel({ model: GEMINI_MODEL });
-        result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
-          generationConfig: { temperature: 0, responseMimeType: "application/json" },
-        });
+        try {
+          result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: `${CREDIBILITY_SYSTEM_PROMPT}\n\nNews item: "${headline}"` }] }],
+            generationConfig: { temperature: 0, responseMimeType: "application/json" },
+          });
+        } catch (err2: any) {
+          // Both keys exhausted — set cooldown
+          const retryMatch = err2.message?.match(/retry in (\d+)/i);
+          const retrySec = retryMatch ? parseInt(retryMatch[1]) : 60;
+          credibilityRateLimitedUntil = Date.now() + Math.max(retrySec * 1000, CREDIBILITY_COOLDOWN_MS);
+          console.warn(`[Credibility] Both keys exhausted, pausing for ${retrySec}s`);
+          return { credibility: null, tokens: { prompt: 0, completion: 0 }, latencyMs: Date.now() - start };
+        }
+      } else if (isRateLimit) {
+        // Single key exhausted — set cooldown
+        const retryMatch = err.message?.match(/retry in (\d+)/i);
+        const retrySec = retryMatch ? parseInt(retryMatch[1]) : 60;
+        credibilityRateLimitedUntil = Date.now() + Math.max(retrySec * 1000, CREDIBILITY_COOLDOWN_MS);
+        console.warn(`[Credibility] Rate-limited, pausing for ${retrySec}s`);
+        return { credibility: null, tokens: { prompt: 0, completion: 0 }, latencyMs: Date.now() - start };
       } else {
         throw err;
       }
@@ -190,7 +230,7 @@ export async function invokeCredibilityAgent(headline: string): Promise<{
       return { credibility: null, tokens, latencyMs };
     }
   } catch (err) {
-    console.error("[Credibility] Gemini call failed:", err);
+    console.error("[Credibility] Gemini call failed:", (err as Error).message?.slice(0, 150));
     return { credibility: null, tokens: { prompt: 0, completion: 0 }, latencyMs: Date.now() - start };
   }
 }

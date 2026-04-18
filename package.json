@@ -11,7 +11,9 @@
     "db:init": "tsx src/db/init.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:connectivity": "tsx src/utils/connectivity-check.ts"
+    "check:connectivity": "tsx src/utils/connectivity-check.ts",
+    "report": "tsx src/metrics/generateReport.ts",
+    "report:30d": "tsx src/metrics/generateReport.ts 30"
   },
   "description": "Real-time narrative-driven crypto paper-trading agent with HITL approval",
   "dependencies": {

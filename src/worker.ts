@@ -3,7 +3,7 @@ import { initDb, query } from "./db/client.js";
 import { fetchCryptoNews, persistEvent, persistFilterDecision, fetchQuote } from "./ingestion/finnhub.js";
 import { startBinanceWs } from "./ingestion/binance.js";
 import { filterEvent } from "./filter/EventFilter.js";
-import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation } from "./agent/llm.js";
+import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation, resetCredibilityCycleCount } from "./agent/llm.js";
 import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
 import { evaluateGuardrails } from "./guardrails/GuardrailEngine.js";
 import { evaluateInvalidation, MarketState } from "./guardrails/InvalidationEvaluator.js";
@@ -220,8 +220,13 @@ async function pollNews() {
   const events = await fetchCryptoNews();
   console.log(`[Worker] Got ${events.length} news items`);
 
+  // Reset credibility call budget for this cycle
+  resetCredibilityCycleCount();
+
   for (const event of events) {
     await processEvent(event);
+    // Small delay between events to avoid hammering APIs
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
@@ -284,10 +289,9 @@ async function invalidationWatcher() {
   try {
     // Query for open trades
     const tradesResult = await query(
-      `SELECT et.id, et.approval_id, et.side, et.coin, et.entry_price, et.invalidation, pd.decision_id
+      `SELECT et.id, et.approval_id, et.side, et.coin, et.entry_price, et.invalidation, pa.decision_id
        FROM executed_trades et
        JOIN pending_approvals pa ON et.approval_id = pa.id
-       JOIN proposed_decisions pd ON pa.decision_id = pd.id
        WHERE et.closed_at IS NULL
        ORDER BY et.created_at ASC
        LIMIT 10`

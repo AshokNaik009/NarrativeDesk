@@ -58,10 +58,19 @@ export function filterEvent(
     return { passed: false, reason: `source ${event.source} reputation ${reputation} below threshold ${cfg.minSourceReputation}` };
   }
 
-  // 4. Rate limit check
-  const recentCount = recentEvents.length;
-  if (recentCount >= cfg.maxEventsPerMinute) {
-    return { passed: false, reason: `rate limit: ${recentCount} events in window exceeds ${cfg.maxEventsPerMinute}` };
+  // 4. Rate limit check — only count same-type events from the last minute
+  const oneMinuteAgo = Date.now() - 60_000;
+  const recentSameType = recentEvents.filter((re) => {
+    const ts = (re.rawPayload as any).timestamp || (re.rawPayload as any).datetime;
+    // If we have a timestamp, use it; otherwise count all recent events of same type
+    if (ts && typeof ts === "number") {
+      const eventTime = ts > 1e12 ? ts : ts * 1000; // handle s vs ms
+      return re.type === event.type && eventTime > oneMinuteAgo;
+    }
+    return re.type === event.type;
+  });
+  if (recentSameType.length >= cfg.maxEventsPerMinute) {
+    return { passed: false, reason: `rate limit: ${recentSameType.length} ${event.type} events in last minute exceeds ${cfg.maxEventsPerMinute}` };
   }
 
   // 5. Empty headline check for news
