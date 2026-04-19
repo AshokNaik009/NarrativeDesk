@@ -2,6 +2,8 @@
 
 Real-time narrative-driven crypto paper-trading agent with human-in-the-loop (HITL) approval. Ingests news and price data, runs LLM analysis with credibility scoring, enforces safety guardrails, and requires human approval before executing any trade on Alpaca's paper trading API.
 
+![Dashboard — live activity feed with sidebar navigation, GST timestamps, filter chips, and per-event "view checks" link](docs/screenshots/dashboard.png)
+
 ---
 
 ## Architecture
@@ -54,7 +56,7 @@ Position Closed (logged with entry/close price, P&L, reason)
 
 ## Dashboard
 
-The HTMX dashboard at `http://localhost:3000` has 6 tabs, all auto-refreshing. A **system pulse** in the header shows worker heartbeat + pending-approval badge (updated every 10s via `GET /pulse`).
+The HTMX dashboard at `http://localhost:3000` uses a **collapsible sidebar** (hamburger in the navbar toggles it at any width; state persists in `localStorage`) and a top navbar with the **system pulse** (worker heartbeat + pending-approval badge, updated every 10s via `GET /pulse`) and a **Chat** button that opens the agent chat modal. All section content auto-refreshes via HTMX.
 
 | Tab | Endpoint | Refresh | What it shows |
 |-----|----------|---------|---------------|

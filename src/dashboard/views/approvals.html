@@ -12,32 +12,117 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background-color: #0d1117;
             color: #c9d1d9;
-            padding: 20px;
             min-height: 100vh;
         }
 
-        .dashboard-container { max-width: 1200px; margin: 0 auto; }
+        /* App shell: sidebar + main. Grid columns flip when .collapsed. */
+        .app-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; transition: grid-template-columns 0.25s ease; }
+        .app-shell.collapsed { grid-template-columns: 0 1fr; }
+        .app-shell.collapsed .sidebar { transform: translateX(-100%); pointer-events: none; }
 
-        .header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { font-size: 24px; color: #c9d1d9; }
-        .header-status { font-size: 12px; color: #8b949e; }
-
-        /* Tabs */
-        .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid #30363d; }
-        .tab {
-            padding: 10px 20px; cursor: pointer; font-size: 13px; font-weight: 500;
-            color: #8b949e; border-bottom: 2px solid transparent; transition: all 0.2s;
+        /* Sidebar */
+        .sidebar {
+            background: #0a0d13;
+            border-right: 1px solid #21262d;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: transform 0.25s ease;
         }
-        .tab:hover { color: #c9d1d9; }
-        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
+        .sidebar-brand {
+            padding: 0 20px 20px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #58a6ff;
+            border-bottom: 1px solid #21262d;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+        .sidebar-brand-sub { font-size: 11px; color: #8b949e; font-weight: 400; margin-top: 2px; letter-spacing: 0.3px; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            font-size: 13px;
+            color: #8b949e;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+        .nav-item:hover { background: #161b22; color: #c9d1d9; }
+        .nav-item.active { background: #161b22; color: #58a6ff; border-left-color: #58a6ff; font-weight: 600; }
+        .nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.8; }
+        .nav-item.active .nav-icon { opacity: 1; }
+        .nav-badge {
+            margin-left: auto;
+            background: #d29922;
+            color: #0d1117;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+        .nav-section-label {
+            padding: 12px 20px 6px 20px;
+            font-size: 10px;
+            color: #484f58;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 700;
+        }
+
+        /* Main column */
+        .main-col { display: flex; flex-direction: column; min-width: 0; }
+
+        /* Top navbar */
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            background: #0d1117;
+            border-bottom: 1px solid #21262d;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .navbar-title { font-size: 18px; font-weight: 600; color: #c9d1d9; }
+        .navbar-right { display: flex; align-items: center; gap: 14px; }
+        .navbar-pulse { font-size: 12px; color: #8b949e; }
+        .nav-chat-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            border-radius: 6px;
+            color: #58a6ff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .nav-chat-btn:hover { background: rgba(88, 166, 255, 0.2); border-color: #58a6ff; }
+        .nav-chat-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+        /* Main content area */
+        .main-content { padding: 24px; max-width: 1200px; width: 100%; }
 
         /* Section headers */
         .section-header {
-            font-size: 16px; font-weight: 600; color: #c9d1d9;
-            margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #21262d;
+            font-size: 18px; font-weight: 600; color: #c9d1d9;
+            margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #21262d;
         }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
         /* Summary Bar */
         .summary-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -51,7 +136,7 @@
         .summary-card.rejected .summary-card-value { color: #f85149; }
         .summary-card.pending .summary-card-value { color: #d29922; }
 
-        /* Approvals List */
+        /* Approvals */
         .approvals-list { display: flex; flex-direction: column; gap: 16px; }
         .approval-item {
             background-color: #161b22; border: 1px solid #30363d; border-radius: 6px;
@@ -111,33 +196,6 @@
             background-color: #161b22; border: 1px solid #30363d; border-radius: 8px;
             padding: 24px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
         }
-        /* Chat button (hoverable) */
-        .chat-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.12);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: transform 0.2s ease, background 0.2s;
-            z-index: 1100;
-        }
-        .chat-btn:hover {
-            background: rgba(255,255,255,0.12);
-            transform: scale(1.08);
-        }
-        .chat-btn svg {
-            width: 24px;
-            height: 24px;
-            fill: #c9d1d9;
-        }
         .modal-header { margin-bottom: 20px; }
         .modal-header h2 { font-size: 20px; color: #c9d1d9; }
         .modal-body { display: flex; flex-direction: column; gap: 16px; }
@@ -157,6 +215,31 @@
         #detailModal .modal { max-width: 720px; width: 90%; }
         #detail-modal-body { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 
+        /* Chat modal */
+        #chatModal .modal { max-width: 640px; width: 92%; display: flex; flex-direction: column; height: 80vh; padding: 0; }
+        #chatModal .modal-header { padding: 16px 20px; border-bottom: 1px solid #21262d; margin: 0; display: flex; justify-content: space-between; align-items: center; }
+        .chat-body {
+            flex: 1; overflow-y: auto; padding: 16px 20px;
+            background: #0d1117; display: flex; flex-direction: column;
+        }
+        .chat-input-row {
+            display: flex; gap: 8px; padding: 12px 16px;
+            border-top: 1px solid #21262d; background: #161b22;
+        }
+        .chat-input-row input {
+            flex: 1; padding: 10px 14px; border: 1px solid #30363d;
+            background: #0d1117; color: #c9d1d9; border-radius: 20px;
+            font-size: 13px; font-family: inherit;
+        }
+        .chat-input-row input:focus { outline: none; border-color: #58a6ff; }
+        .chat-send-btn {
+            padding: 10px 18px; background: #58a6ff; color: #0d1117;
+            border: none; border-radius: 20px; font-size: 13px;
+            font-weight: 600; cursor: pointer;
+        }
+        .chat-send-btn:hover { background: #1f6feb; }
+        .chat-send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
         /* Activity filter chips */
         .filter-chip {
             display: inline-flex; align-items: center; gap: 6px;
@@ -173,111 +256,141 @@
         /* Activity row hidden by filter */
         .activity-row.hidden { display: none !important; }
 
+        /* Sidebar scrim — only ever visible in mobile when sidebar is open */
+        .sidebar-scrim { display: none; }
+
         /* Responsive */
-        @media (max-width: 768px) {
-            body { padding: 12px; }
+        @media (max-width: 900px) {
+            .app-shell, .app-shell.collapsed { grid-template-columns: 1fr; }
+            .sidebar {
+                position: fixed; left: -240px; top: 0; width: 240px; z-index: 1500;
+                transform: none !important;
+                transition: left 0.25s ease;
+            }
+            .sidebar.open { left: 0; }
+            .app-shell.collapsed .sidebar { left: -240px; }
+            .sidebar-scrim {
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5); z-index: 1400;
+            }
+            .sidebar-scrim.open { display: block; }
+            .main-content { padding: 16px; }
             .approval-content { grid-template-columns: 1fr; gap: 16px; }
             .approval-item-header { grid-template-columns: 1fr; gap: 8px; }
-            .summary-bar { grid-template-columns: 1fr; }
-            .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-            .tab { flex-shrink: 0; }
-
-            /* Big touch-friendly buttons */
+            .summary-bar { grid-template-columns: 1fr 1fr; }
             .approval-actions { flex-direction: column; gap: 10px; }
             .approval-actions .btn {
-                width: 100%;
-                min-height: 48px;
-                font-size: 15px;
-                padding: 12px 16px;
+                width: 100%; min-height: 48px; font-size: 15px; padding: 12px 16px;
             }
-            .btn-submit, .btn-cancel {
-                min-height: 48px;
-                font-size: 15px;
-            }
-
-            /* Prominent countdown timer at top of card */
-            .countdown-timer {
-                font-size: 20px;
-                padding: 12px;
-                width: 100%;
-                min-width: 0;
-            }
-
-            /* Full-screen modal on mobile */
-            .modal {
-                width: 100%;
-                height: 100%;
-                max-width: 100%;
-                max-height: 100vh;
-                border-radius: 0;
-                border: none;
-            }
+            .btn-submit, .btn-cancel { min-height: 48px; font-size: 15px; }
+            .countdown-timer { font-size: 20px; padding: 12px; width: 100%; min-width: 0; }
+            .modal { width: 100%; height: 100%; max-width: 100%; max-height: 100vh; border-radius: 0; border: none; }
             .modal-overlay { padding: 0; }
-
-            .header { flex-direction: column; align-items: flex-start; gap: 8px; }
-            .header-status { font-size: 11px; }
+            #chatModal .modal { height: 100vh; }
+            .navbar-pulse { display: none; }
         }
+        .navbar-menu-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            background: transparent; border: 1px solid #30363d;
+            color: #c9d1d9; padding: 6px 10px; border-radius: 4px;
+            cursor: pointer; font-size: 16px; line-height: 1;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .navbar-menu-btn:hover { background: #161b22; border-color: #58a6ff; }
     </style>
 </head>
 <body>
-    <div class="dashboard-container">
-        <div class="header">
-            <h1>NarrativeDesk</h1>
-            <div class="header-status" hx-get="/pulse" hx-trigger="load, every 10s" hx-swap="innerHTML">
-                Loading...
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                NarrativeDesk
+                <div class="sidebar-brand-sub">HITL paper-trading agent</div>
+            </div>
+
+            <div class="nav-section-label">Desk</div>
+            <div class="nav-item active" data-tab="activity" onclick="switchTab('activity', this)">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12h4l3-9 4 18 3-9h4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Activity
+            </div>
+            <div class="nav-item" data-tab="approvals" onclick="switchTab('approvals', this)">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                Approvals
+                <span class="nav-badge" id="sidebar-pending-badge" style="display:none;">0</span>
+            </div>
+            <div class="nav-item" data-tab="portfolio" onclick="switchTab('portfolio', this)">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8v4h8z"/></svg>
+                Portfolio
+            </div>
+            <div class="nav-item" data-tab="decisions" onclick="switchTab('decisions', this)">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                Decisions
+            </div>
+            <div class="nav-item" data-tab="thesis" onclick="switchTab('thesis', this)">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+                Thesis
+            </div>
+        </aside>
+
+        <!-- Main column -->
+        <div class="main-col">
+            <!-- Top navbar -->
+            <div class="navbar">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <button class="navbar-menu-btn" onclick="toggleSidebar()">&#9776;</button>
+                    <div class="navbar-title" id="navbar-title">Live Activity Feed</div>
+                </div>
+                <div class="navbar-right">
+                    <div class="navbar-pulse" hx-get="/pulse" hx-trigger="load, every 10s" hx-swap="innerHTML">
+                        Loading...
+                    </div>
+                    <button class="nav-chat-btn" onclick="openChatModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        Chat
+                    </button>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- Activity Tab (default) -->
+                <div id="tab-activity" class="tab-content active">
+                    <div id="activity-section" hx-get="/activity" hx-trigger="load, every 15s" hx-swap="outerHTML" style="margin-top:12px;margin-bottom:32px;">
+                        <div style="text-align:center;padding:40px;color:#8b949e;">Connecting to worker...</div>
+                    </div>
+                </div>
+
+                <!-- Approvals Tab -->
+                <div id="tab-approvals" class="tab-content">
+                    <div id="approvals-section" hx-get="/approvals" hx-trigger="load, every 3s" hx-swap="outerHTML">
+                        <div style="text-align:center;padding:40px;color:#8b949e;">Loading approvals...</div>
+                    </div>
+                </div>
+
+                <!-- Portfolio Tab -->
+                <div id="tab-portfolio" class="tab-content">
+                    <div id="portfolio-section" hx-get="/portfolio" hx-trigger="load, every 10s" hx-swap="outerHTML">
+                        <div style="text-align:center;padding:40px;color:#8b949e;">Loading portfolio...</div>
+                    </div>
+                </div>
+
+                <!-- Decisions Tab -->
+                <div id="tab-decisions" class="tab-content">
+                    <div id="decisions-section" hx-get="/decisions" hx-trigger="load, every 10s" hx-swap="outerHTML">
+                        <div style="text-align:center;padding:40px;color:#8b949e;">Loading decisions...</div>
+                    </div>
+                </div>
+
+                <!-- Thesis Tab -->
+                <div id="tab-thesis" class="tab-content">
+                    <div id="thesis-section" hx-get="/thesis" hx-trigger="load, every 30s" hx-swap="outerHTML">
+                        <div style="text-align:center;padding:40px;color:#8b949e;">Loading thesis...</div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Tabs -->
-        <div class="tabs">
-            <div class="tab active" onclick="switchTab('activity')">Activity</div>
-            <div class="tab" onclick="switchTab('approvals')">Approvals<span id="approvals-tab-badge"></span></div>
-            <div class="tab" onclick="switchTab('portfolio')">Portfolio</div>
-            <div class="tab" onclick="switchTab('decisions')">Decisions</div>
-            <div class="tab" onclick="switchTab('thesis')">Thesis</div>
-
-        </div>
-
-        <!-- Activity Tab (default) -->
-        <div id="tab-activity" class="tab-content active">
-            <div class="section-header">Live Activity Feed</div>
-            <div id="activity-section" hx-get="/activity" hx-trigger="load, every 15s" hx-swap="outerHTML" style="margin-top:12px;margin-bottom:32px;">
-                <div style="text-align:center;padding:40px;color:#8b949e;">Connecting to worker...</div>
-            </div>
-        </div>
-
-        <!-- Approvals Tab -->
-        <div id="tab-approvals" class="tab-content">
-            <div id="approvals-section" hx-get="/approvals" hx-trigger="load, every 3s" hx-swap="outerHTML">
-                <div style="text-align:center;padding:40px;color:#8b949e;">Loading approvals...</div>
-            </div>
-        </div>
-
-        <!-- Portfolio Tab -->
-        <div id="tab-portfolio" class="tab-content">
-            <div class="section-header">Portfolio State</div>
-            <div id="portfolio-section" hx-get="/portfolio" hx-trigger="load, every 10s" hx-swap="outerHTML">
-                <div style="text-align:center;padding:40px;color:#8b949e;">Loading portfolio...</div>
-            </div>
-        </div>
-
-        <!-- Decisions Tab -->
-        <div id="tab-decisions" class="tab-content">
-            <div class="section-header">Recent Decisions (Last 20)</div>
-            <div id="decisions-section" hx-get="/decisions" hx-trigger="load, every 10s" hx-swap="outerHTML">
-                <div style="text-align:center;padding:40px;color:#8b949e;">Loading decisions...</div>
-            </div>
-        </div>
-
-        <!-- Thesis Tab -->
-        <div id="tab-thesis" class="tab-content">
-            <div class="section-header">Agent Thesis</div>
-            <div id="thesis-section" hx-get="/thesis" hx-trigger="load, every 30s" hx-swap="outerHTML">
-                <div style="text-align:center;padding:40px;color:#8b949e;">Loading thesis...</div>
-            </div>
-        </div>
-
     </div>
+
+    <div class="sidebar-scrim" id="sidebar-scrim" onclick="toggleSidebar(false)"></div>
 
     <!-- Detail Modal (activity, thesis version, decision detail) -->
     <div id="detailModal" class="modal-overlay">
@@ -291,6 +404,23 @@
                     <div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Chat Modal -->
+    <div id="chatModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 style="font-size:16px;">Chat with Agent</h2>
+                <button class="btn btn-cancel" onclick="closeModal()" style="padding:6px 12px;">Close</button>
+            </div>
+            <div class="chat-body" id="chat-modal-body">
+                <div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>
+            </div>
+            <form class="chat-input-row" onsubmit="sendChat(event)">
+                <input type="text" id="chat-input" placeholder="Ask about the thesis, a coin, or a recent decision..." autocomplete="off">
+                <button type="submit" class="chat-send-btn" id="chat-send-btn">Send</button>
+            </form>
         </div>
     </div>
 
@@ -386,15 +516,55 @@
     <script>
         let currentApprovalId = null;
 
-        // Tab switching
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        const TAB_TITLES = {
+            activity: 'Live Activity Feed',
+            approvals: 'Pending Approvals',
+            portfolio: 'Portfolio',
+            decisions: 'Recent Decisions',
+            thesis: 'Agent Thesis',
+        };
+
+        // Sidebar tab switching
+        function switchTab(tabName, clickedEl) {
+            document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.tab-content#tab-${tabName}`).classList.add('active');
-            event.target.classList.add('active');
+            const target = document.getElementById('tab-' + tabName);
+            if (target) target.classList.add('active');
+            if (clickedEl) clickedEl.classList.add('active');
+            const titleEl = document.getElementById('navbar-title');
+            if (titleEl && TAB_TITLES[tabName]) titleEl.textContent = TAB_TITLES[tabName];
+            toggleSidebar(false);
         }
 
-        // Modal management
+        function toggleSidebar(force) {
+            const shell = document.querySelector('.app-shell');
+            const sb = document.getElementById('sidebar');
+            const sc = document.getElementById('sidebar-scrim');
+            const isMobile = window.matchMedia('(max-width: 900px)').matches;
+            if (isMobile) {
+                // Mobile: slide-in overlay
+                const shouldOpen = force === undefined ? !sb.classList.contains('open') : !!force;
+                sb.classList.toggle('open', shouldOpen);
+                sc.classList.toggle('open', shouldOpen);
+            } else {
+                // Desktop: collapse / expand inline
+                const shouldCollapse = force === undefined ? !shell.classList.contains('collapsed') : !force;
+                shell.classList.toggle('collapsed', shouldCollapse);
+                try { localStorage.setItem('nd.sidebarCollapsed', shouldCollapse ? '1' : '0'); } catch {}
+            }
+        }
+
+        // Restore collapsed state on load (desktop only)
+        (function restoreSidebar(){
+            try {
+                const v = localStorage.getItem('nd.sidebarCollapsed');
+                if (v === '1' && !window.matchMedia('(max-width: 900px)').matches) {
+                    document.querySelector('.app-shell')?.classList.add('collapsed');
+                }
+            } catch {}
+        })();
+
+        // Approval modals
         function openModal(type, approvalId) {
             currentApprovalId = approvalId;
             document.getElementById(type + 'Modal').classList.add('active');
@@ -404,15 +574,62 @@
             currentApprovalId = null;
             document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
         }
-        // Open chat modal
-        function openChatModal() {
+
+        // Chat modal
+        async function openChatModal() {
             document.getElementById('chatModal').classList.add('active');
             const body = document.getElementById('chat-modal-body');
             body.innerHTML = '<div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>';
-            fetch('/chat', { headers: { 'HX-Request': 'true' } })
-                .then(r => r.ok ? r.text() : Promise.reject('Failed to load chat'))
-                .then(html => { body.innerHTML = html; })
-                .catch(err => { body.innerHTML = '<div style="padding:20px;color:#f85149;">' + err + '</div>'; });
+            try {
+                const res = await fetch('/chat', { headers: { 'HX-Request': 'true' } });
+                body.innerHTML = res.ok ? await res.text() : '<div style="padding:20px;color:#f85149;">Failed to load chat.</div>';
+                body.scrollTop = body.scrollHeight;
+            } catch (err) {
+                body.innerHTML = '<div style="padding:20px;color:#f85149;">' + err.message + '</div>';
+            }
+            setTimeout(() => { document.getElementById('chat-input')?.focus(); }, 50);
+        }
+
+        async function sendChat(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const btn = document.getElementById('chat-send-btn');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const body = document.getElementById('chat-modal-body');
+            // Optimistic user bubble
+            const userBubble = document.createElement('div');
+            userBubble.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:10px;';
+            userBubble.innerHTML = '<div style="max-width:75%;background:#1f6feb;color:#ffffff;padding:8px 12px;border-radius:12px;font-size:13px;white-space:pre-wrap;"></div>';
+            userBubble.querySelector('div').textContent = msg;
+            body.appendChild(userBubble);
+            body.scrollTop = body.scrollHeight;
+            input.value = '';
+            input.disabled = true;
+            btn.disabled = true;
+            btn.textContent = '...';
+            try {
+                const form = new URLSearchParams();
+                form.append('message', msg);
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'HX-Request': 'true' },
+                    body: form.toString(),
+                });
+                const html = res.ok ? await res.text() : '<div style="color:#f85149;padding:12px;font-size:12px;">Chat failed.</div>';
+                // Server returns both user + assistant bubbles — remove our optimistic one
+                userBubble.remove();
+                body.insertAdjacentHTML('beforeend', html);
+                body.scrollTop = body.scrollHeight;
+            } catch (err) {
+                userBubble.remove();
+                body.insertAdjacentHTML('beforeend', '<div style="color:#f85149;padding:12px;font-size:12px;">Network error: ' + err.message + '</div>');
+            } finally {
+                input.disabled = false;
+                btn.disabled = false;
+                btn.textContent = 'Send';
+                input.focus();
+            }
         }
 
         // Submit approve/reject/edit via fetch
@@ -440,7 +657,6 @@
 
                 if (res.ok) {
                     closeModal();
-                    // HTMX will auto-refresh the approvals list
                 } else {
                     const err = await res.json();
                     alert('Error: ' + (err.error || 'Unknown error'));
@@ -484,13 +700,29 @@
 
         function applyActivityFilter() {
             document.querySelectorAll('.activity-row').forEach(row => {
-                const kind = row.dataset.kind; // 'passed' | 'filtered' | 'decision'
+                const kind = row.dataset.kind;
                 row.classList.toggle('hidden', !activityFilter[kind]);
             });
         }
 
         // Re-apply filter after every HTMX swap so fresh rows respect the current toggles
-        document.body.addEventListener('htmx:afterSwap', applyActivityFilter);
+        document.body.addEventListener('htmx:afterSwap', (e) => {
+            applyActivityFilter();
+            // Sidebar pending badge from /pulse
+            if (e.detail?.target?.classList?.contains('navbar-pulse')) {
+                const txt = e.detail.target.textContent || '';
+                const m = txt.match(/(\d+)\s*pending/);
+                const badge = document.getElementById('sidebar-pending-badge');
+                if (badge) {
+                    if (m && parseInt(m[1]) > 0) {
+                        badge.textContent = m[1];
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
+        });
     </script>
 </body>
 </html>

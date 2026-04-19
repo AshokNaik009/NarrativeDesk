@@ -185,7 +185,7 @@ async function processEvent(event: Event) {
       // (decisionId from earlier query is already available)
       if (decisionResult.rows.length > 0) {
         const decisionId = decisionResult.rows[0].id;
-        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min from now
+        const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
 
         try {
           const approvalResult = await query(
@@ -198,7 +198,7 @@ async function processEvent(event: Event) {
           if (approvalResult.rows.length > 0) {
             const approvalId = approvalResult.rows[0].id;
             console.log(
-              `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 15m) for decision ${decisionId.slice(0, 8)}`
+              `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 2h) for decision ${decisionId.slice(0, 8)}`
             );
 
             // Fire-and-forget: generate counter-thesis (devil's advocate) for this approval
