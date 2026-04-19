@@ -66,8 +66,13 @@ CREATE TABLE IF NOT EXISTS proposed_decisions (
   side VARCHAR(4) CHECK (side IN ('buy', 'sell')),
   coin VARCHAR(20),
   size_pct NUMERIC(5,2),
-  invalidation TEXT,
-  time_horizon VARCHAR(10) CHECK (time_horizon IN ('1h', '4h', '24h', 'open')),
+  entry_zone_low NUMERIC(20,8),
+  entry_zone_high NUMERIC(20,8),
+  invalidation_price NUMERIC(20,8),
+  target_price NUMERIC(20,8),
+  timeframe VARCHAR(10) CHECK (timeframe IN ('scalp', 'swing', 'position')),
+  correlation_notes TEXT,
+  conviction SMALLINT CHECK (conviction BETWEEN 1 AND 5),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

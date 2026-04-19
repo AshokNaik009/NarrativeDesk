@@ -1,40 +1,121 @@
 # NarrativeDesk
 
-Real-time narrative-driven crypto paper-trading agent with human-in-the-loop (HITL) approval. Ingests news and price data, runs LLM analysis with credibility scoring, enforces safety guardrails, and requires human approval before executing any trade on Alpaca's paper trading API.
+Reference implementation of an end-to-end HITL agentic trading pipeline. Designed to study how guardrailed, human-approved LLM agents behave on real (paper) orders. Ingests news and price data, runs LLM analysis with credibility scoring, enforces safety guardrails, and requires human approval before executing any trade on Alpaca's paper trading API. **Not** a returns-generating system or alpha source.
 
 ![Dashboard — live activity feed with sidebar navigation, GST timestamps, filter chips, and per-event "view checks" link](docs/screenshots/dashboard.png)
 
 ---
 
+## ⚠️ Limitations
+
+This is a reference implementation, not a trading system. Before using or extending NarrativeDesk, understand these structural constraints:
+
+- **Latency floor**: LLM inference adds ~3–10s per decision. Crypto edge windows are milliseconds to seconds; this pipeline will always miss them.
+- **Venue mismatch**: Alpaca paper trading does not reflect crypto microstructure (no funding, liquidations, leverage, or proper slippage). Any reported returns are not transferable to real trading.
+- **News alone is weak**: By the time headlines appear, positioning has usually moved. Phase 2 will add crypto-native signals (funding, liquidations, on-chain).
+- **No backtest evidence**: The pipeline has never been replayed against historical data. Performance claims are speculative until Phase 3 lands.
+- **HITL approval biases**: Human decisions are logged but not yet analyzed for systematic bias (time-of-day, thesis-type, conviction). Phase 4 will quantify this.
+
+**Full details:** [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md)
+
+---
+
 ## Architecture
 
+NarrativeDesk is a five-layer pipeline. Each layer is independently testable, has explicit guardrails, and writes a full audit trail to Postgres. No trade reaches execution without passing every prior layer.
+
 ```
-Finnhub News (60s poll) + Binance WebSocket (live prices)
-    |
-    v
-EventFilter (watchlist, dedupe, source reputation, rate limit)
-    |
-    v
-Credibility Sub-Agent (Gemini 2.0 Flash — news only, 1-5 rating)
-    |
-    v
-Main Agent (Groq Llama 3.3 70B -> OpenRouter fallback)
-    |   Outputs: classification (ignore/monitor/act), reasoning, thesis delta, action
-    v
-GuardrailEngine (5 rules: max 10% position, 3 concurrent, 5/24h trades, 15min cooldown, 5% stop-loss)
-    |
-    v
-Pending Approval (15min timeout, HTMX dashboard)
-    |   Human: Approve / Reject / Edit (with tag + freetext)
-    v
-Execution Loop (Alpaca paper trading, 10s interval, 30s post-approval delay)
-    |
-    v
-Invalidation Watcher (30s interval, auto-closes on trigger)
-    |
-    v
-Position Closed (logged with entry/close price, P&L, reason)
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 0 — INGESTION                                                 │
+├──────────────────────────────────────────────────────────────────────┤
+│  Finnhub News (60s REST poll)   │   Binance WebSocket (tick prices)  │
+│  → src/ingestion/finnhub.ts     │   → src/ingestion/binance.ts       │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 1 — FILTER & CREDIBILITY                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  EventFilter  →  Credibility Sub-Agent (Gemini 2.0 Flash, 1–5)       │
+│    • watchlist match        • dedupe (Jaccard similarity)            │
+│    • source reputation      • rate limit + min-length                │
+│  Drops ~70% of noise before any expensive LLM call.                  │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 2 — REASONING                                                 │
+├──────────────────────────────────────────────────────────────────────┤
+│  Main Agent — Groq Llama 3.3 70B  →  OpenRouter fallback             │
+│  Output (Zod-validated JSON):                                        │
+│    { classification: ignore | monitor | act,                         │
+│      reasoning, thesis_delta, action }                               │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 3 — GUARDRAILS (hard-coded, non-negotiable)                   │
+├──────────────────────────────────────────────────────────────────────┤
+│    1. Max 10% position size          4. 15-min per-coin cooldown     │
+│    2. Max 3 concurrent positions     5. 5% stop-loss                 │
+│    3. Max 5 trades / 24h                                             │
+│  Any violation → block before human sees it.                         │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 4 — HITL APPROVAL                                             │
+├──────────────────────────────────────────────────────────────────────┤
+│  Pending Approval (15-min timeout, HTMX dashboard)                   │
+│    • Human: Approve / Reject / Edit  (tag + freetext)                │
+│    • Devil's-advocate counter-thesis (second Groq call)              │
+│    • Idempotent state machine (ApprovalStateMachine.ts)              │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 5 — EXECUTION & INVALIDATION                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│  Execution Loop → Alpaca Paper Trading                               │
+│    • 10s poll interval, 30s post-approval delay                      │
+│  Invalidation Watcher                                                │
+│    • 30s loop, auto-closes on price/time trigger                     │
+│  Outcome → logged with entry, close, P&L, reason, post-mortem        │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+### Data flow at a glance
+
+| Stage | Latency budget | Persists to | Observable via |
+|-------|---------------|-------------|----------------|
+| Ingestion | 60s (news) / live (prices) | `events` | Activity tab |
+| Filter | <50ms | `filter_decisions` | Activity tab (chip: *filtered*) |
+| Credibility | 1–3s | `subagent_invocations` | Event detail modal |
+| Main Agent | 2–10s | `agent_invocations`, `proposed_decisions` | Decisions tab |
+| Guardrails | <10ms | `guardrail_decisions` | Event detail modal |
+| HITL | 15-min window | `pending_approvals` | Approvals tab |
+| Execution | 10s poll | `executed_trades` | Portfolio tab |
+| Invalidation | 30s poll | `executed_trades` (close) | Portfolio + Decisions |
+
+### Design principles
+
+- **Fail closed.** Any layer that can't decide blocks the trade. No default-allow anywhere.
+- **Everything is logged.** 12 Postgres tables capture the full lifecycle of every event — including the ones that got dropped. This audit trail is the core product.
+- **Humans are the last line of defense, not the first.** The agent must already be right before a human ever sees the proposal.
+- **LLM output is always Zod-validated.** A malformed JSON blob is a rejection, not a parse error.
+- **This is a decision-logger, not an alpha engine.** The system's value is in demonstrating repeatable HITL agentic patterns and capturing ground truth on what decisions were made and why.
+
+---
+
+## Roadmap
+
+The full phased plan lives in **[`docs/ROADMAP.md`](docs/ROADMAP.md)**. These phases turn the reference implementation into a defensible decision-logger and research tool:
+
+| Phase | Title | Effort | Addresses |
+|-------|-------|--------|-----------|
+| 0 | Honest reframing (README + `LIMITATIONS.md`) | 0.5 day | ✓ Complete |
+| 1 | Structured `TradePlan` schema (entry/invalidation/target/size/conviction) | 1–2 days | Coarse signals → measurable R-multiples |
+| 2 | Crypto-native signals (Binance funding/OI/liquidations, DefiLlama, Etherscan) | ~1 week | News-only weakness |
+| 3 | Backtest harness replaying stored events vs. HODL | 3–5 days | No backtest evidence |
+| 4 | Decision-logger / bias analyzer dashboard | 2–3 days | HITL approval biases |
+| 5 | Hyperliquid / Bybit testnet execution adapter *(optional)* | 2–3 days | Venue mismatch |
+
+To start a fresh session on any phase: `Begin Phase <N> from docs/ROADMAP.md`.
 
 ---
 
@@ -164,7 +245,7 @@ DASHBOARD_SECRET=my-secret-123   # Auth header for external API calls to /approv
 
 ## Guardrail Rules
 
-The `GuardrailEngine` enforces 5 safety rules before any trade reaches approval:
+The `GuardrailEngine` enforces 5 safety rules before any decision reaches human approval. These protect against runaway agent behavior:
 
 1. **Max Position Size**: No single trade > 10% of portfolio
 2. **Max Concurrent Positions**: No more than 3 open at once
@@ -172,9 +253,11 @@ The `GuardrailEngine` enforces 5 safety rules before any trade reaches approval:
 4. **Cooldown**: 15-minute minimum between trades on the same coin
 5. **Stop-Loss**: 5% max loss threshold
 
+Note: These are *paper trading* guardrails. Any real-money deployment would need additional constraints (leverage limits, liquidation distance, tail-risk hedging).
+
 ---
 
-## Metrics & Reporting
+## Observability & Decision Logging
 
 ### API Endpoints
 
@@ -185,24 +268,26 @@ curl http://localhost:3000/health | jq
 # Activity metrics (events/h, agent calls, approvals)
 curl http://localhost:3000/metrics | jq
 
-# Full Layer 2-4 metrics report
+# Full Layer 2-4 decision log report
 curl http://localhost:3000/metrics/full?days=7 | jq
 ```
 
-### Weekly Report
+### Decision Report
 
 ```bash
-# Generate markdown report (default: 7 days)
+# Generate markdown decision log (default: 7 days)
 npm run report
 
-# Generate 30-day report
+# Generate 30-day decision log
 npm run report:30d
 ```
 
 Reports are written to `reports/metrics-YYYY-MM-DD.md` and include:
 - **Layer 2**: Classification breakdown, thesis delta frequency, credibility correlation
-- **Layer 3**: Win rate, profit factor, invalidation accuracy, avg hold duration
+- **Layer 3**: Guardrail blocks, invalidation accuracy, avg hold duration
 - **Layer 4**: Approval/rejection rates, time-to-decision, tag breakdown, rejection-vs-hindsight
+
+These metrics document *what decisions were made and why*, not trading returns. Phase 3 (backtest harness) will add P&L analysis. Phase 4 (bias analyzer) will add per-tag and per-time-window outcome analysis.
 
 ---
 

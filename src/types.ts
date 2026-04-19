@@ -10,20 +10,29 @@ export const EventSchema = z.object({
 });
 export type Event = z.infer<typeof EventSchema>;
 
+// TradePlan schema: structured trade with entry, invalidation, target, risk metrics
+export const TradePlanSchema = z.object({
+  entry_zone: z.tuple([z.number(), z.number()]).refine(
+    ([low, high]) => low <= high,
+    "entry_zone low must be <= high"
+  ),
+  invalidation: z.number().positive("invalidation must be a positive price"),
+  target: z.number().positive("target must be a positive price"),
+  timeframe: z.enum(["scalp", "swing", "position"]),
+  size_pct: z.number().min(0.1).max(10),
+  correlation_notes: z.string(),
+  conviction: z.number().int().min(1).max(5),
+  side: z.enum(["buy", "sell"]),
+  coin: z.string(),
+});
+export type TradePlan = z.infer<typeof TradePlanSchema>;
+
 // Agent decision output
 export const DecisionSchema = z.object({
   classification: z.enum(["ignore", "monitor", "act"]),
   reasoning: z.string().min(10),
   thesis_delta: z.string(),
-  action: z
-    .object({
-      side: z.enum(["buy", "sell"]),
-      coin: z.string(),
-      size_pct: z.number().min(0.1).max(10),
-      invalidation: z.string().min(5),
-      time_horizon: z.enum(["1h", "4h", "24h", "open"]),
-    })
-    .optional(),
+  trade_plan: TradePlanSchema.optional(),
 });
 export type Decision = z.infer<typeof DecisionSchema>;
 

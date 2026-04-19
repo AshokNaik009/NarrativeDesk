@@ -133,9 +133,9 @@ async function processEvent(event: Event) {
 
     // Persist proposed decision
     await query(
-      `INSERT INTO proposed_decisions (agent_invocation_id, classification, reasoning, thesis_delta, side, coin, size_pct, invalidation, time_horizon)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [invocationId, d.classification, d.reasoning, d.thesis_delta, d.action?.side, d.action?.coin, d.action?.size_pct, d.action?.invalidation, d.action?.time_horizon]
+      `INSERT INTO proposed_decisions (agent_invocation_id, classification, reasoning, thesis_delta, side, coin, size_pct, entry_zone_low, entry_zone_high, invalidation_price, target_price, timeframe, correlation_notes, conviction)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [invocationId, d.classification, d.reasoning, d.thesis_delta, d.trade_plan?.side, d.trade_plan?.coin, d.trade_plan?.size_pct, d.trade_plan?.entry_zone[0], d.trade_plan?.entry_zone[1], d.trade_plan?.invalidation, d.trade_plan?.target, d.trade_plan?.timeframe, d.trade_plan?.correlation_notes, d.trade_plan?.conviction]
     );
 
     // Update thesis if there's a delta
@@ -146,11 +146,11 @@ async function processEvent(event: Event) {
     }
 
     // Phase 3: Run guardrails if decision is "act"
-    if (d.classification === "act" && d.action) {
+    if (d.classification === "act" && d.trade_plan) {
       const portfolio = await queryPortfolioState();
       const tradeHistory = await getTradeHistory(24);
 
-      const guardrailResult = evaluateGuardrails(d.action, portfolio, tradeHistory);
+      const guardrailResult = evaluateGuardrails(d.trade_plan, portfolio, tradeHistory);
 
       console.log(
         `[Worker] Guardrail check: ${guardrailResult.allowed ? "ALLOWED" : "BLOCKED"} - ${guardrailResult.reason}`
