@@ -154,3 +154,41 @@ CREATE INDEX IF NOT EXISTS idx_executed_trades_closed ON executed_trades(closed_
 CREATE INDEX IF NOT EXISTS idx_guardrail_decisions_decision ON guardrail_decisions(decision_id);
 CREATE INDEX IF NOT EXISTS idx_error_logs_service ON error_logs(service);
 CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);
+
+-- Counter-thesis (devil's advocate) for each pending approval
+CREATE TABLE IF NOT EXISTS counter_theses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  approval_id UUID NOT NULL REFERENCES pending_approvals(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  latency_ms INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Trade postmortems (auto-generated when trade closes)
+CREATE TABLE IF NOT EXISTS trade_postmortems (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  trade_id UUID NOT NULL REFERENCES executed_trades(id) ON DELETE CASCADE,
+  postmortem TEXT NOT NULL,
+  lesson TEXT,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  latency_ms INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Chat log between user and agent (optional persistence)
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id VARCHAR(100) NOT NULL,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_counter_theses_approval ON counter_theses(approval_id);
+CREATE INDEX IF NOT EXISTS idx_trade_postmortems_trade ON trade_postmortems(trade_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);

@@ -1,163 +1,126 @@
 # NarrativeDesk
 
-Real-time narrative-driven crypto paper-trading agent with human-in-the-loop approval.
-
-**Status:** Phase 3-8 implementation complete. Core pipeline functional. Local testing recommended before next deployment.
-
----
-
-## Quick Start (Local Development)
-
-### Prerequisites
-- Node.js 20+
-- PostgreSQL 14+
-- Git
-
-### Installation
-
-```bash
-# Clone repo
-git clone https://github.com/AshokNaik009/NarrativeDesk.git
-cd NarrativeDesk
-
-# Install dependencies
-npm install
-
-# Create .env file (copy from .env template)
-cp .env.example .env
-# Edit .env with your API keys
-
-# Start local database (or use existing Render DB)
-# If using local Postgres:
-createdb narrativedesk
-
-# Apply schema
-node run-schema.js
-
-# Build TypeScript
-npm run build
-```
-
-### Run Locally
-
-**Terminal 1 - Web Server:**
-```bash
-npm run dev:web
-```
-Opens at `http://localhost:3000`
-
-**Terminal 2 - Background Worker:**
-```bash
-npm run dev:worker
-```
-
-**Monitor:**
-```bash
-# Health check
-curl http://localhost:3000/health | jq
-
-# Metrics
-curl http://localhost:3000/metrics | jq
-```
-
----
-
-## What Works ✅
-
-### Infrastructure
-- ✅ Express server with HTMX dashboard
-- ✅ PostgreSQL schema (all 9 tables + indexes)
-- ✅ Finnhub news polling (60s interval)
-- ✅ Binance WebSocket price feeds
-- ✅ Alpaca paper trading client with retry logic
-
-### Agent Pipeline
-- ✅ Event ingestion & filtering (90% noise rejection)
-- ✅ Groq Llama 3.3 70B main agent
-- ✅ Gemini Flash credibility sub-agent (with fallback to secondary key)
-- ✅ Groq → OpenRouter fallback if rate-limited
-- ✅ Guardrail enforcement (max 10% position, 3 concurrent, 5/24h trades, 15m cooldown)
-- ✅ Execution loop (every 10s, waits 30s after approval)
-- ✅ Invalidation watcher (every 30s, auto-closes positions on trigger)
-- ✅ Thesis versioning & git sync (optional)
-
-### Dashboard
-- ✅ HTMX-powered approval UI at `/` (dark theme, responsive)
-- ✅ Countdown timers (red < 5m, yellow < 10m)
-- ✅ Approve/Reject/Edit buttons with tag dropdowns
-- ✅ Auto-refresh every 2s via HTMX polling
-- ✅ Summary stats (pending, approved, rejected)
-
-### Monitoring
-- ✅ `/health` endpoint (service status + latency)
-- ✅ `/metrics` endpoint (activity tracking)
-- ✅ Error logging to `error_logs` table
-- ✅ Comprehensive logging across all tables
-
----
-
-## What Doesn't Work ❌ (Known Issues)
-
-### Environment Variables
-- ❌ Render doesn't auto-load `.env` files (env vars must be set in Render dashboard)
-- Dashboard secret authentication fails if `DASHBOARD_SECRET` not explicitly set
-
-### Background Worker
-- ❌ **Not deployed yet** on Render (only web service is up)
-- Without worker: no news polling, no agent decisions, no approvals created
-
-### GOOGLE_API_KEY
-- Need to add to `.env` and Render dashboard (not present currently)
-
-### Vitest
-- ✅ Config created but build issue with rolldown native bindings
-- Tests exist in `src/**/__tests__/` but won't run on Render
+Real-time narrative-driven crypto paper-trading agent with human-in-the-loop (HITL) approval. Ingests news and price data, runs LLM analysis with credibility scoring, enforces safety guardrails, and requires human approval before executing any trade on Alpaca's paper trading API.
 
 ---
 
 ## Architecture
 
 ```
-Events (Finnhub + Binance WS)
-    ↓
-Filter (EventFilter - 90% noise rejection)
-    ↓
-Credibility Agent (Gemini Flash - news only)
-    ↓
-Main Agent (Groq Llama 3.3 70B → OpenRouter fallback)
-    ↓
-Guardrails (GuardrailEngine - pure logic)
-    ↓
-Pending Approvals (15min timeout)
-    ↓ (Dashboard approval)
-Execution Loop (Alpaca paper trading API)
-    ↓
-Invalidation Watcher (InvalidationEvaluator)
-    ↓
-Position Closed (logged with outcome)
+Finnhub News (60s poll) + Binance WebSocket (live prices)
+    |
+    v
+EventFilter (watchlist, dedupe, source reputation, rate limit)
+    |
+    v
+Credibility Sub-Agent (Gemini 2.0 Flash — news only, 1-5 rating)
+    |
+    v
+Main Agent (Groq Llama 3.3 70B -> OpenRouter fallback)
+    |   Outputs: classification (ignore/monitor/act), reasoning, thesis delta, action
+    v
+GuardrailEngine (5 rules: max 10% position, 3 concurrent, 5/24h trades, 15min cooldown, 5% stop-loss)
+    |
+    v
+Pending Approval (15min timeout, HTMX dashboard)
+    |   Human: Approve / Reject / Edit (with tag + freetext)
+    v
+Execution Loop (Alpaca paper trading, 10s interval, 30s post-approval delay)
+    |
+    v
+Invalidation Watcher (30s interval, auto-closes on trigger)
+    |
+    v
+Position Closed (logged with entry/close price, P&L, reason)
 ```
 
-**Database:**
-- 9 tables: events, filter_decisions, agent_invocations, proposed_decisions, pending_approvals, executed_trades, guardrail_decisions, error_logs, thesis_versions
-- All indexed for query performance
-- Schema in `src/db/schema.sql`
+---
 
-**Services:**
-- **Web Service** (`src/server.ts`): Express, HTMX dashboard, /approvals REST API
-- **Worker** (`src/worker.ts`): Ingestion loops, agent orchestration, execution, invalidation watching
-- **Database**: Shared Postgres (Render or external)
+## Tech Stack
+
+| Layer | Tech |
+|-------|------|
+| Server | Express 5, HTMX (server-rendered, no React/SPA) |
+| LLM - Main Agent | Groq Llama 3.3 70B (fallback: OpenRouter) |
+| LLM - Credibility | Google Gemini 2.0 Flash (dual-key, per-cycle budget) |
+| Schema Validation | Zod (all LLM outputs validated) |
+| Database | PostgreSQL (12 tables, all indexed) |
+| Market Data | Finnhub (news), Binance WebSocket (prices) |
+| Execution | Alpaca Paper Trading API |
+| Tests | Vitest (unit + integration, ESM) |
+| Language | TypeScript (strict mode, noUncheckedIndexedAccess) |
+
+---
+
+## Dashboard
+
+The HTMX dashboard at `http://localhost:3000` has 6 tabs, all auto-refreshing. A **system pulse** in the header shows worker heartbeat + pending-approval badge (updated every 10s via `GET /pulse`).
+
+| Tab | Endpoint | Refresh | What it shows |
+|-----|----------|---------|---------------|
+| **Activity** | `GET /activity` | 15s | Live timeline with filter chips (passed / filtered out / agent decision) to sort rows, clickable rows that open a detail modal (full event lifecycle), and **infinite scroll** via `GET /activity/older` when you scroll past the first 40 rows |
+| **Approvals** | `GET /approvals` | 3s | Pending trade proposals with countdown timer, approve/reject/edit buttons, tag classification, reasoning, and a red **devil's-advocate counter-thesis** panel generated by a second Groq call |
+| **Portfolio** | `GET /portfolio` | 10s | Cash, total value, open positions, live invalidation distance |
+| **Decisions** | `GET /decisions` | 10s | Last 20 agent decisions with classification, action, approval status, P&L, and auto-generated post-mortems for closed trades |
+| **Thesis** | `GET /thesis` | 15s+30s | Current market thesis plus a clickable version-history timeline — click any version to see its full content in a modal |
+| **Chat** | `GET/POST /chat` | on-demand | Bubble-style chat with the agent. Uses current thesis + portfolio + last 10 decisions as context (Groq Llama 3.3 70B). Conversation history persists in `chat_messages` |
+
+### Detail modal
+
+Clicking an Activity row or a Thesis version opens a shared modal overlay. For events, the modal hits `GET /activity/event/:eventId` and renders the full lifecycle: raw event → filter decision → agent invocation → proposed decision(s).
+
+### Filter chips
+
+Activity rows carry a `data-kind` attribute (`passed` / `filtered` / `decision`). The chip bar at the top toggles visibility client-side — toggles persist across the 15s HTMX swap via an `htmx:afterSwap` reapply hook.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 20+
+- PostgreSQL 14+
+
+### Setup
+
+```bash
+git clone https://github.com/AshokNaik009/NarrativeDesk.git
+cd NarrativeDesk
+npm install
+
+# Create .env (see Environment Variables below)
+cp .env.example .env
+
+# Apply schema to your Postgres
+node run-schema.js
+
+# Build
+npm run build
+```
+
+### Run Locally
+
+Open two terminals:
+
+```bash
+# Terminal 1 — Web server (dashboard + API)
+npm run dev:web
+
+# Terminal 2 — Background worker (ingestion, agent, execution)
+npm run dev:worker
+```
+
+Open `http://localhost:3000` — the Activity tab will start populating within 60 seconds as Finnhub news arrives.
 
 ---
 
 ## Environment Variables
 
-Required for local dev and Render deployment:
-
 ```bash
 # LLM APIs
 GROQ_API_KEY=                    # https://console.groq.com
 GOOGLE_API_KEY=                  # https://makersuite.google.com/app/apikey
-GOOGLE_API_KEY_SECONDARY=        # (optional, fallback Gemini key)
+GOOGLE_API_KEY_SECONDARY=        # (optional) fallback Gemini key for rate limits
 OPENROUTER_API_KEY=              # https://openrouter.ai/keys
 
 # Database
@@ -171,146 +134,98 @@ ALPACA_API_KEY=                  # https://app.alpaca.markets/paper
 ALPACA_API_SECRET=
 
 # Dashboard
-DASHBOARD_SECRET=my-secret-123   # Any string, for /approvals auth header
+DASHBOARD_SECRET=my-secret-123   # Auth header for external API calls to /approvals
 ```
 
 ---
 
-## Testing Locally
+## Database
 
-### Unit Tests (Pure Modules)
+12 tables in `src/db/schema.sql`:
+
+| Table | Purpose |
+|-------|---------|
+| `events` | Raw ingested news + price events |
+| `filter_decisions` | Pass/reject decision for each event |
+| `agent_invocations` | Main agent LLM call logs (tokens, latency, output) |
+| `subagent_invocations` | Credibility sub-agent results (rating 1-5) |
+| `proposed_decisions` | Agent's classification + reasoning + action |
+| `pending_approvals` | HITL approval state (pending/approved/rejected/edited/expired) |
+| `guardrail_decisions` | Guardrail pass/block per decision |
+| `executed_trades` | Filled trades with entry/close price, P&L |
+| `thesis_versions` | Agent's evolving market thesis |
+| `portfolio_snapshots` | Periodic portfolio state snapshots |
+| `outcome_prices` | Price tracking at decision time + 15m/1h/4h/24h |
+| `error_logs` | System errors for debugging |
+
+---
+
+## Guardrail Rules
+
+The `GuardrailEngine` enforces 5 safety rules before any trade reaches approval:
+
+1. **Max Position Size**: No single trade > 10% of portfolio
+2. **Max Concurrent Positions**: No more than 3 open at once
+3. **Daily Trade Limit**: Max 5 trades per 24 hours
+4. **Cooldown**: 15-minute minimum between trades on the same coin
+5. **Stop-Loss**: 5% max loss threshold
+
+---
+
+## Metrics & Reporting
+
+### API Endpoints
+
 ```bash
-npm test
-```
-
-Tests for:
-- EventFilter (dedupe, watchlist, rate-limit)
-- DecisionSchemaValidator (LLM output parsing)
-- GuardrailEngine (position limits, cooldowns)
-- InvalidationEvaluator (trigger evaluation)
-- ApprovalStateMachine (state transitions)
-
-### Manual Testing
-
-**1. Check health:**
-```bash
+# Service health (DB, Groq, Gemini status)
 curl http://localhost:3000/health | jq
+
+# Activity metrics (events/h, agent calls, approvals)
+curl http://localhost:3000/metrics | jq
+
+# Full Layer 2-4 metrics report
+curl http://localhost:3000/metrics/full?days=7 | jq
 ```
 
-Expected:
-```json
-{
-  "timestamp": "2026-04-17T...",
-  "services": [
-    {"name": "PostgreSQL", "status": "ok"},
-    {"name": "Groq", "status": "ok"},
-    {"name": "Google Gemini", "status": "ok"}
-  ],
-  "metrics": {...}
-}
-```
+### Weekly Report
 
-**2. View dashboard:**
-```
-http://localhost:3000/
-```
-
-Should show:
-- Pending/Approved/Rejected counts (0 if worker not running)
-- Summary cards
-- (No approvals yet until worker creates them)
-
-**3. Test approval API (with auth):**
 ```bash
-curl -X POST http://localhost:3000/approvals/test-id/approve \
-  -H 'x-dashboard-secret: my-secret-123' \
-  -H 'content-type: application/json' \
-  -d '{"tag": "reasonable_take"}'
+# Generate markdown report (default: 7 days)
+npm run report
+
+# Generate 30-day report
+npm run report:30d
 ```
 
-Expected: `200` with approval details (or `404` if approval doesn't exist)
+Reports are written to `reports/metrics-YYYY-MM-DD.md` and include:
+- **Layer 2**: Classification breakdown, thesis delta frequency, credibility correlation
+- **Layer 3**: Win rate, profit factor, invalidation accuracy, avg hold duration
+- **Layer 4**: Approval/rejection rates, time-to-decision, tag breakdown, rejection-vs-hindsight
 
 ---
 
-## Deployment to Render (Next Time)
+## Testing
 
-### Step 1: Prepare
 ```bash
-git add .
-git commit -m "message"
-git push origin main
+# Run all tests
+npm test
+
+# Watch mode
+npm run test:watch
 ```
 
-### Step 2: Create Web Service
-1. Go to https://render.com
-2. New → Web Service
-3. Connect GitHub repo
-4. Name: `narrativedesk-web`
-5. Build: `npm install && npm run build`
-6. Start: `npm run start:web`
-7. Add **all env vars** (see Environment Variables above)
-8. **CRITICAL:** Set `DASHBOARD_SECRET` explicitly in Render
+### Unit Tests
+- `EventFilter` — dedupe (Jaccard similarity), watchlist, rate-limit, source reputation
+- `DecisionSchemaValidator` — LLM JSON output parsing + Zod validation
+- `GuardrailEngine` — position limits, concurrent trades, cooldowns, stop-loss
+- `InvalidationEvaluator` — price-based + time-based trigger evaluation
+- `ApprovalStateMachine` — idempotent state transitions (pending -> approved/rejected/edited/expired)
 
-### Step 3: Create PostgreSQL
-1. New → PostgreSQL
-2. Name: `narrativedesk-db`
-3. Region: Same as web service
-4. Copy connection URL
-5. Add to web service env: `DATABASE_URL=<copied_url>`
-6. Redeploy web service
-
-### Step 4: Apply Schema
-```bash
-export DATABASE_URL="<from_step_3>"
-node run-schema.js
-```
-
-### Step 5: Create Background Worker
-1. New → Background Worker
-2. Connect same GitHub repo
-3. Name: `narrativedesk-worker`
-4. Build: `npm install && npm run build`
-5. Start: `npm run start:worker`
-6. Add **same env vars** as web service (copy from web service)
-7. Create
-
-### Step 6: Verify
-```bash
-curl https://narrativedesk.onrender.com/health | jq
-```
-
-Should return healthy status with all services "ok".
-
----
-
-## Common Issues & Fixes
-
-### 401 on /approvals endpoints
-**Cause:** `DASHBOARD_SECRET` not set or wrong value
-**Fix:** 
-1. Render Dashboard → Web Service → Environment
-2. Add/verify `DASHBOARD_SECRET`
-3. Redeploy
-
-### Worker not creating approvals
-**Cause:** Background worker not deployed yet
-**Fix:** Deploy background worker (see Deployment Step 5 above)
-
-### 503 on /health (Postgres error)
-**Cause:** DATABASE_URL not set or wrong
-**Fix:** 
-1. Verify Postgres is running (local) or check Render DB URL
-2. Update DATABASE_URL env var
-3. Redeploy
-
-### Groq rate-limited
-**Cause:** Too many agent calls too fast
-**Fix:** Already handled — automatically falls back to OpenRouter
-(Check logs for `"Falling back to OpenRouter"`)
-
-### Build fails with "rolldown native binding" error
-**Cause:** Vitest config issue
-**Fix:** Already fixed in `vitest.config.ts` — rebuild locally to verify
+### Integration Tests
+- `finnhub.integration` — news fetching, normalization, watchlist matching, error handling
+- `binance.integration` — WebSocket connection, ticker normalization, symbol mapping, reconnect
+- `routes.integration` — health, metrics, dashboard HTML, auth middleware, approve/reject/edit validation
+- `alpaca.integration` — order submission, auth headers, fills, retry backoff, position close
 
 ---
 
@@ -318,107 +233,81 @@ Should return healthy status with all services "ok".
 
 ```
 src/
-├── agent/               # LLM agents & thesis management
-│   ├── llm.ts          # Groq + Gemini + OpenRouter client
-│   ├── thesis.ts       # Thesis versioning
-│   └── GuardrailEngine.ts
-├── execution/          # Trade execution
-│   ├── alpaca.ts       # Alpaca API client
-│   └── __tests__/
-├── filter/             # Event filtering
-│   ├── EventFilter.ts
-│   ├── DecisionSchemaValidator.ts
-│   └── __tests__/
-├── guardrails/         # Safety checks
-│   ├── GuardrailEngine.ts
-│   ├── InvalidationEvaluator.ts
-│   └── __tests__/
-├── hitl/               # Human approval state machine
-│   ├── ApprovalStateMachine.ts
-│   └── __tests__/
-├── ingestion/          # Event sources
-│   ├── finnhub.ts
-│   └── binance.ts
-├── db/
-│   ├── client.ts       # Postgres pool & schema init
-│   └── schema.sql      # Full database schema
-├── dashboard/views/
-│   └── approvals.html  # HTMX dashboard UI
-├── utils/
-│   ├── health.ts       # /health & /metrics endpoints
-│   └── connectivity-check.ts
-├── config.ts           # Configuration from env vars
-├── types.ts            # TypeScript interfaces
-├── server.ts           # Express server
-├── worker.ts           # Background loops (ingestion, execution, invalidation)
-└── __tests__/          # Integration tests
-
-docs/
-├── BRD.md              # Original business requirements
-└── IMPLEMENTATION_PLAN.md
-
-.env                    # Local env vars (git-ignored)
-.env.production         # Production env template
-render.yaml             # Render deployment config
-vitest.config.ts        # Test runner config
-tsconfig.json           # TypeScript config
-package.json            # Dependencies
+  agent/
+    llm.ts               # Groq + Gemini + OpenRouter LLM clients
+    thesis.ts             # Thesis versioning & persistence
+  execution/
+    alpaca.ts             # Alpaca paper trading API client
+  filter/
+    EventFilter.ts        # 5-check event filter (watchlist, dedupe, reputation, rate, length)
+    DecisionSchemaValidator.ts  # Zod schema validation for LLM output
+  guardrails/
+    GuardrailEngine.ts    # 5 safety rules evaluated pre-approval
+    InvalidationEvaluator.ts   # Trade invalidation condition evaluator
+  hitl/
+    ApprovalStateMachine.ts    # Idempotent approval state transitions
+  ingestion/
+    finnhub.ts            # Finnhub REST news polling
+    binance.ts            # Binance WebSocket price stream
+  metrics/
+    MetricsCalculator.ts  # Layer 2-4 metrics computation
+    generateReport.ts     # CLI markdown report generator
+    EvalExporter.ts       # Decision lifecycle export for eval harness
+  db/
+    client.ts             # Postgres pool, query helper, schema init
+    schema.sql            # Full 12-table schema with indexes
+  dashboard/views/
+    approvals.html        # HTMX dashboard (5 tabs, dark theme)
+  utils/
+    health.ts             # /health and /metrics endpoint logic
+    connectivity-check.ts # API key validation utility
+  config.ts               # Env var configuration
+  types.ts                # TypeScript interfaces & Zod schemas
+  server.ts               # Express server (dashboard + REST API)
+  worker.ts               # Background loops (ingestion, agent, execution, invalidation)
 ```
 
 ---
 
-## Key Metrics (After Running)
+## Deployment (Render)
 
-Once approvals start flowing, check:
+### Services to create:
+
+1. **PostgreSQL** — `narrativedesk-db`
+2. **Web Service** — `narrativedesk-web` (build: `npm install && npm run build`, start: `npm run start:web`)
+3. **Background Worker** — `narrativedesk-worker` (same build, start: `npm run start:worker`)
+
+Both web and worker need the same environment variables. Set `DASHBOARD_SECRET` explicitly in Render (not loaded from `.env`).
 
 ```bash
-# Approvals per hour
-curl http://localhost:3000/metrics | jq '.oneHourMetrics'
+# Apply schema to Render DB
+DATABASE_URL="<render-postgres-url>" node run-schema.js
 
-# Database activity
-curl http://localhost:3000/health | jq '.metrics'
+# Verify
+curl https://narrativedesk.onrender.com/health | jq
 ```
 
----
-
-## Next Steps
-
-1. **Local Testing**
-   - [ ] Run `npm run dev:web` + `npm run dev:worker` together
-   - [ ] Wait for first Finnhub poll (60s)
-   - [ ] Check dashboard at http://localhost:3000
-   - [ ] Verify at least 1 event ingested
-   - [ ] Check `/health` endpoint
-
-2. **Debug Issues Locally**
-   - Check console logs for errors
-   - Query DB: `SELECT COUNT(*) FROM events;`
-   - Check guardrail rejections: `SELECT * FROM guardrail_decisions;`
-
-3. **Deploy to Render**
-   - Follow "Deployment to Render" section above
-   - Do NOT skip Step 2 (set DASHBOARD_SECRET explicitly)
-   - Verify worker is running before testing approvals
-
-4. **Monitor Live**
-   - Dashboard auto-refreshes every 2s
-   - Check `/health` regularly
-   - Review `/metrics` hourly
+The worker includes a self-ping to keep the Render free-tier web service alive (every 10 minutes).
 
 ---
 
-## Contributing
+## API Reference
 
-See `BRD.md` for original vision and scope. Current implementation focuses on:
-- Reliable ingestion (Finnhub + Binance)
-- Safe guardrails (no autonomous trading)
-- Clear HITL workflow (approval before execution)
-- Comprehensive logging (all decisions auditable)
-
-Avoid:
-- Adding features beyond Phases 3-8
-- Autonomous trading (defeats HITL purpose)
-- Real money integration (paper trading only)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/` | - | HTMX dashboard |
+| GET | `/health` | - | Service status + metrics |
+| GET | `/metrics` | - | Activity counts |
+| GET | `/metrics/full?days=7` | - | Full Layer 2-4 report |
+| GET | `/activity` | - | Live activity feed (HTMX partial) |
+| GET | `/approvals` | HTMX or secret | Pending approvals (HTML or JSON) |
+| GET | `/approvals/:id` | secret | Single approval detail |
+| POST | `/approvals/:id/approve` | secret | Approve (body: `{tag, freetext?}`) |
+| POST | `/approvals/:id/reject` | secret | Reject (body: `{tag, freetext?}`) |
+| POST | `/approvals/:id/edit` | secret | Edit + approve (body: `{tag, freetext?, edited_size_pct}`) |
+| GET | `/portfolio` | - | Portfolio state (HTMX partial) |
+| GET | `/thesis` | - | Current thesis (HTMX partial) |
+| GET | `/decisions` | - | Recent decisions (HTMX partial) |
 
 ---
 
@@ -426,8 +315,6 @@ Avoid:
 
 MIT
 
----
-
 ## Author
 
-Built during agentic-workflows project series #4.
+Built by [AshokNaik009](https://github.com/AshokNaik009)

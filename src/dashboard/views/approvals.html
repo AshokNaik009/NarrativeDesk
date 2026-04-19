@@ -111,6 +111,33 @@
             background-color: #161b22; border: 1px solid #30363d; border-radius: 8px;
             padding: 24px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
         }
+        /* Chat button (hoverable) */
+        .chat-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s ease, background 0.2s;
+            z-index: 1100;
+        }
+        .chat-btn:hover {
+            background: rgba(255,255,255,0.12);
+            transform: scale(1.08);
+        }
+        .chat-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: #c9d1d9;
+        }
         .modal-header { margin-bottom: 20px; }
         .modal-header h2 { font-size: 20px; color: #c9d1d9; }
         .modal-body { display: flex; flex-direction: column; gap: 16px; }
@@ -126,12 +153,69 @@
         /* HTMX transitions */
         .htmx-settling { opacity: 1; transition: opacity 0.2s ease-out; }
 
+        /* Detail modal (wider for content) */
+        #detailModal .modal { max-width: 720px; width: 90%; }
+        #detail-modal-body { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
+
+        /* Activity filter chips */
+        .filter-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 14px; cursor: pointer;
+            font-size: 12px; color: #8b949e; background: #21262d;
+            border: 1px solid #30363d; user-select: none;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .filter-chip:hover { border-color: #58a6ff; }
+        .filter-chip.active { background: rgba(88, 166, 255, 0.15); color: #58a6ff; border-color: #58a6ff; }
+        .filter-chip.dim { opacity: 0.45; }
+        .filter-chip .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* Activity row hidden by filter */
+        .activity-row.hidden { display: none !important; }
+
         /* Responsive */
         @media (max-width: 768px) {
-            .approval-content { grid-template-columns: 1fr; }
+            body { padding: 12px; }
+            .approval-content { grid-template-columns: 1fr; gap: 16px; }
             .approval-item-header { grid-template-columns: 1fr; gap: 8px; }
             .summary-bar { grid-template-columns: 1fr; }
-            .tabs { overflow-x: auto; }
+            .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+            .tab { flex-shrink: 0; }
+
+            /* Big touch-friendly buttons */
+            .approval-actions { flex-direction: column; gap: 10px; }
+            .approval-actions .btn {
+                width: 100%;
+                min-height: 48px;
+                font-size: 15px;
+                padding: 12px 16px;
+            }
+            .btn-submit, .btn-cancel {
+                min-height: 48px;
+                font-size: 15px;
+            }
+
+            /* Prominent countdown timer at top of card */
+            .countdown-timer {
+                font-size: 20px;
+                padding: 12px;
+                width: 100%;
+                min-width: 0;
+            }
+
+            /* Full-screen modal on mobile */
+            .modal {
+                width: 100%;
+                height: 100%;
+                max-width: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+                border: none;
+            }
+            .modal-overlay { padding: 0; }
+
+            .header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .header-status { font-size: 11px; }
         }
     </style>
 </head>
@@ -139,7 +223,7 @@
     <div class="dashboard-container">
         <div class="header">
             <h1>NarrativeDesk</h1>
-            <div class="header-status" hx-get="/health" hx-trigger="load, every 30s" hx-swap="innerHTML" hx-select=".uptime-text">
+            <div class="header-status" hx-get="/pulse" hx-trigger="load, every 10s" hx-swap="innerHTML">
                 Loading...
             </div>
         </div>
@@ -147,16 +231,17 @@
         <!-- Tabs -->
         <div class="tabs">
             <div class="tab active" onclick="switchTab('activity')">Activity</div>
-            <div class="tab" onclick="switchTab('approvals')">Approvals</div>
+            <div class="tab" onclick="switchTab('approvals')">Approvals<span id="approvals-tab-badge"></span></div>
             <div class="tab" onclick="switchTab('portfolio')">Portfolio</div>
             <div class="tab" onclick="switchTab('decisions')">Decisions</div>
             <div class="tab" onclick="switchTab('thesis')">Thesis</div>
+
         </div>
 
         <!-- Activity Tab (default) -->
         <div id="tab-activity" class="tab-content active">
             <div class="section-header">Live Activity Feed</div>
-            <div id="activity-section" hx-get="/activity" hx-trigger="load, every 5s" hx-swap="outerHTML">
+            <div id="activity-section" hx-get="/activity" hx-trigger="load, every 15s" hx-swap="outerHTML" style="margin-top:12px;margin-bottom:32px;">
                 <div style="text-align:center;padding:40px;color:#8b949e;">Connecting to worker...</div>
             </div>
         </div>
@@ -187,8 +272,24 @@
         <!-- Thesis Tab -->
         <div id="tab-thesis" class="tab-content">
             <div class="section-header">Agent Thesis</div>
-            <div id="thesis-section" hx-get="/thesis" hx-trigger="load, every 15s" hx-swap="outerHTML">
+            <div id="thesis-section" hx-get="/thesis" hx-trigger="load, every 30s" hx-swap="outerHTML">
                 <div style="text-align:center;padding:40px;color:#8b949e;">Loading thesis...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Detail Modal (activity, thesis version, decision detail) -->
+    <div id="detailModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <h2>Details</h2>
+                <button class="btn btn-cancel" onclick="closeModal()" style="padding:6px 12px;">Close</button>
+            </div>
+            <div class="modal-body">
+                <div id="detail-modal-body">
+                    <div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -303,6 +404,16 @@
             currentApprovalId = null;
             document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
         }
+        // Open chat modal
+        function openChatModal() {
+            document.getElementById('chatModal').classList.add('active');
+            const body = document.getElementById('chat-modal-body');
+            body.innerHTML = '<div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>';
+            fetch('/chat', { headers: { 'HX-Request': 'true' } })
+                .then(r => r.ok ? r.text() : Promise.reject('Failed to load chat'))
+                .then(html => { body.innerHTML = html; })
+                .catch(err => { body.innerHTML = '<div style="padding:20px;color:#f85149;">' + err + '</div>'; });
+        }
 
         // Submit approve/reject/edit via fetch
         async function submitAction(type) {
@@ -344,6 +455,42 @@
             modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+        // Open detail modal and fetch content
+        async function openDetail(url) {
+            const body = document.getElementById('detail-modal-body');
+            body.innerHTML = '<div style="padding:20px;text-align:center;color:#8b949e;">Loading...</div>';
+            document.getElementById('detailModal').classList.add('active');
+            try {
+                const res = await fetch(url, { headers: { 'HX-Request': 'true' } });
+                body.innerHTML = res.ok ? await res.text() : '<div style="padding:20px;color:#f85149;">Failed to load details.</div>';
+            } catch (err) {
+                body.innerHTML = '<div style="padding:20px;color:#f85149;">Network error: ' + err.message + '</div>';
+            }
+        }
+
+        // Activity filter state — which row types to SHOW
+        const activityFilter = { passed: true, filtered: true, decision: true };
+
+        function toggleActivityFilter(key) {
+            activityFilter[key] = !activityFilter[key];
+            applyActivityFilter();
+            const chip = document.querySelector('[data-filter="' + key + '"]');
+            if (chip) {
+                chip.classList.toggle('active', activityFilter[key]);
+                chip.classList.toggle('dim', !activityFilter[key]);
+            }
+        }
+
+        function applyActivityFilter() {
+            document.querySelectorAll('.activity-row').forEach(row => {
+                const kind = row.dataset.kind; // 'passed' | 'filtered' | 'decision'
+                row.classList.toggle('hidden', !activityFilter[kind]);
+            });
+        }
+
+        // Re-apply filter after every HTMX swap so fresh rows respect the current toggles
+        document.body.addEventListener('htmx:afterSwap', applyActivityFilter);
     </script>
 </body>
 </html>

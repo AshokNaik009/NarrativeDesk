@@ -4,6 +4,7 @@ import { fetchCryptoNews, persistEvent, persistFilterDecision, fetchQuote } from
 import { startBinanceWs } from "./ingestion/binance.js";
 import { filterEvent } from "./filter/EventFilter.js";
 import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation, resetCredibilityCycleCount } from "./agent/llm.js";
+import { invokeCounterThesis, invokeTradePostmortem, logCounterThesis, logPostmortem } from "./agent/features.js";
 import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
 import { evaluateGuardrails } from "./guardrails/GuardrailEngine.js";
 import { evaluateInvalidation, MarketState } from "./guardrails/InvalidationEvaluator.js";
@@ -199,6 +200,36 @@ async function processEvent(event: Event) {
             console.log(
               `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 15m) for decision ${decisionId.slice(0, 8)}`
             );
+
+            // Fire-and-forget: generate counter-thesis (devil's advocate) for this approval
+            (async () => {
+              try {
+                const eventRow = await query(
+                  `SELECT headline, source FROM events WHERE id = $1`,
+                  [eventId]
+                );
+                const evt = eventRow.rows[0] || {};
+                const ct = await invokeCounterThesis(
+                  {
+                    classification: d.classification,
+                    reasoning: d.reasoning,
+                    coin: d.action?.coin ?? null,
+                    side: d.action?.side ?? null,
+                    size_pct: d.action?.size_pct ?? null,
+                    invalidation: d.action?.invalidation ?? null,
+                  },
+                  { headline: evt.headline ?? null, source: evt.source ?? null }
+                );
+                if (ct.counterThesis) {
+                  await logCounterThesis(approvalId, ct.counterThesis, ct.tokens, ct.latencyMs);
+                  console.log(
+                    `[Worker] Counter-thesis logged for approval ${approvalId.slice(0, 8)} (${ct.latencyMs}ms)`
+                  );
+                }
+              } catch (err) {
+                console.error("[Worker] Counter-thesis generation failed:", (err as Error).message);
+              }
+            })().catch((err) => console.error("[Worker] Counter-thesis task error:", err));
           }
         } catch (err: any) {
           if (err.code === "42P01" || err.message?.includes("does not exist")) {
@@ -340,6 +371,50 @@ async function invalidationWatcher() {
           );
 
           console.log(`[Worker] Trade closed: ${trade.id.slice(0, 8)} at ${closePrice} | reason: ${invalidationResult.reason}`);
+
+          // Fire-and-forget: generate postmortem for the closed trade
+          const closedTradeId = trade.id;
+          const closedCoin = trade.coin;
+          const closedSide = trade.side;
+          const closedEntry = Number(trade.entry_price);
+          const closedInvalidation = trade.invalidation;
+          const closeReason = invalidationResult.reason;
+          (async () => {
+            try {
+              const detailsResult = await query(
+                `SELECT et.created_at AS opened_at, et.closed_at AS closed_at, pd.reasoning AS original_reasoning
+                 FROM executed_trades et
+                 JOIN pending_approvals pa ON et.approval_id = pa.id
+                 JOIN proposed_decisions pd ON pa.decision_id = pd.id
+                 WHERE et.id = $1`,
+                [closedTradeId]
+              );
+              if (detailsResult.rows.length === 0) {
+                console.warn(`[Worker] Postmortem: trade ${closedTradeId.slice(0, 8)} details not found`);
+                return;
+              }
+              const details = detailsResult.rows[0];
+              const pm = await invokeTradePostmortem({
+                coin: closedCoin,
+                side: closedSide,
+                entry_price: closedEntry,
+                close_price: Number(closePrice),
+                close_reason: closeReason,
+                opened_at: new Date(details.opened_at),
+                closed_at: new Date(details.closed_at ?? Date.now()),
+                original_reasoning: details.original_reasoning ?? "",
+                invalidation: closedInvalidation ?? "",
+              });
+              if (pm.postmortem) {
+                await logPostmortem(closedTradeId, pm.postmortem, pm.lesson, pm.tokens, pm.latencyMs);
+                console.log(
+                  `[Worker] Postmortem logged for trade ${closedTradeId.slice(0, 8)} (${pm.latencyMs}ms)`
+                );
+              }
+            } catch (err) {
+              console.error("[Worker] Postmortem generation failed:", (err as Error).message);
+            }
+          })().catch((err) => console.error("[Worker] Postmortem task error:", err));
         } catch (err) {
           console.error(`[Worker] Failed to close trade ${trade.id.slice(0, 8)}:`, (err as Error).message);
         }
