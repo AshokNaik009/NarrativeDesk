@@ -4,19 +4,6 @@ Reference implementation of an end-to-end HITL agentic trading pipeline. Designe
 
 ![Dashboard — live activity feed with sidebar navigation, GST timestamps, filter chips, and per-event "view checks" link](docs/screenshots/dashboard.png)
 
----
-
-## ⚠️ Limitations
-
-This is a reference implementation, not a trading system. Before using or extending NarrativeDesk, understand these structural constraints:
-
-- **Latency floor**: LLM inference adds ~3–10s per decision. Crypto edge windows are milliseconds to seconds; this pipeline will always miss them.
-- **Venue mismatch**: Alpaca paper trading does not reflect crypto microstructure (no funding, liquidations, leverage, or proper slippage). Any reported returns are not transferable to real trading.
-- **News alone is weak**: By the time headlines appear, positioning has usually moved. ✓ Phase 2 now adds crypto-native signals (funding, liquidations, on-chain) as primary triggers.
-- **No backtest evidence**: The pipeline has never been replayed against historical data. Performance claims are speculative until Phase 3 lands.
-- **HITL approval biases**: Human decisions are logged but not yet analyzed for systematic bias (time-of-day, thesis-type, conviction). Phase 4 will quantify this.
-
-**Full details:** [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md)
 
 ---
 
