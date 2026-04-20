@@ -25,7 +25,7 @@ approvalsRouter.get("/approvals", async (req, res) => {
       `SELECT
         pa.id, pa.status, pa.expires_at, pa.created_at,
         pd.classification, pd.reasoning, pd.thesis_delta,
-        pd.side, pd.coin, pd.size_pct, pd.invalidation, pd.time_horizon,
+        pd.side, pd.coin, pd.size_pct, pd.entry_zone_low, pd.entry_zone_high, pd.invalidation_price, pd.target_price, pd.timeframe, pd.correlation_notes, pd.conviction,
         ai.model
       FROM pending_approvals pa
       JOIN proposed_decisions pd ON pa.decision_id = pd.id
@@ -47,7 +47,7 @@ approvalsRouter.get("/approvals", async (req, res) => {
         id: row.id, status: row.status,
         headline: `${row.classification.toUpperCase()}: ${row.coin || "N/A"}`,
         decision: row.classification, reasoning: row.reasoning, thesis_delta: row.thesis_delta,
-        action: { side: row.side, coin: row.coin, size_pct: row.size_pct, invalidation: row.invalidation },
+        trade_plan: row.side ? { side: row.side, coin: row.coin, size_pct: row.size_pct, entry_zone: [row.entry_zone_low, row.entry_zone_high], invalidation: row.invalidation_price, target: row.target_price, timeframe: row.timeframe, correlation_notes: row.correlation_notes, conviction: row.conviction } : null,
         expires_at: row.expires_at, created_at: row.created_at, model: row.model,
       }));
       return res.json(approvals);
@@ -60,6 +60,13 @@ approvalsRouter.get("/approvals", async (req, res) => {
       for (const row of pendingResult.rows) {
         const cd = renderCountdown(new Date(row.expires_at));
         const sideCss = row.side === "buy" ? "buy" : "sell";
+        const entryZoneStr = row.entry_zone_low !== null && row.entry_zone_high !== null
+          ? `$${parseFloat(row.entry_zone_low).toFixed(2)} – $${parseFloat(row.entry_zone_high).toFixed(2)}`
+          : "N/A";
+        const invalidationStr = row.invalidation_price !== null ? `$${parseFloat(row.invalidation_price).toFixed(2)}` : "N/A";
+        const targetStr = row.target_price !== null ? `$${parseFloat(row.target_price).toFixed(2)}` : "N/A";
+        const convictionStr = row.conviction !== null ? `${row.conviction}/5` : "N/A";
+
         cardsHtml += `
         <div class="approval-item">
           <div class="approval-item-header">
@@ -79,7 +86,7 @@ approvalsRouter.get("/approvals", async (req, res) => {
               </div>
             </div>
             <div class="approval-section">
-              <div class="approval-section-label">Action</div>
+              <div class="approval-section-label">Trade Plan</div>
               <div class="approval-section-value">
                 ${row.side ? `
                 <div class="action-badge ${sideCss}">
@@ -87,9 +94,15 @@ approvalsRouter.get("/approvals", async (req, res) => {
                   <span>${row.size_pct}%</span>
                   <span>${esc(row.coin)}</span>
                 </div>
-                <div style="margin-top:8px;font-size:11px;color:#8b949e;">Invalidation: ${esc(row.invalidation)}</div>
-                <div style="margin-top:4px;font-size:11px;color:#8b949e;">Horizon: ${esc(row.time_horizon)}</div>
-                ` : `<span style="color:#8b949e;">No action</span>`}
+                <div style="margin-top:8px;font-size:11px;color:#8b949e;">
+                  <div>Entry Zone: ${entryZoneStr}</div>
+                  <div>Invalidation: ${invalidationStr}</div>
+                  <div>Target: ${targetStr}</div>
+                  <div>Timeframe: ${esc(row.timeframe || "N/A")}</div>
+                  <div>Conviction: ${convictionStr}</div>
+                </div>
+                ${row.correlation_notes ? `<div style="margin-top:6px;font-size:11px;color:#8b949e;">Notes: ${esc(row.correlation_notes)}</div>` : ""}
+                ` : `<span style="color:#8b949e;">No trade plan</span>`}
               </div>
             </div>
           </div>
@@ -123,10 +136,12 @@ approvalsRouter.get("/approvals/:id", async (req, res) => {
     const { id } = req.params;
     const result = await query(
       `SELECT
-        pa.id, pa.status, pa.tag, pa.tag_freetext, pa.edited_size_pct,
+        pa.id, pa.status, pa.tag, pa.tag_freetext,
+        pa.edited_size_pct, pa.edited_entry_zone_low, pa.edited_entry_zone_high,
+        pa.edited_invalidation_price, pa.edited_target_price, pa.edited_conviction,
         pa.expires_at, pa.created_at, pa.resolved_at,
         pd.id as decision_id, pd.classification, pd.reasoning, pd.thesis_delta,
-        pd.side, pd.coin, pd.size_pct, pd.invalidation, pd.time_horizon,
+        pd.side, pd.coin, pd.size_pct, pd.entry_zone_low, pd.entry_zone_high, pd.invalidation_price, pd.target_price, pd.timeframe, pd.correlation_notes, pd.conviction,
         ai.model
       FROM pending_approvals pa
       JOIN proposed_decisions pd ON pa.decision_id = pd.id
@@ -147,18 +162,29 @@ approvalsRouter.get("/approvals/:id", async (req, res) => {
       decision: row.classification,
       reasoning: row.reasoning,
       thesis_delta: row.thesis_delta,
-      action: {
+      trade_plan: {
         side: row.side,
         coin: row.coin,
         size_pct: row.size_pct,
-        invalidation: row.invalidation,
+        entry_zone: [row.entry_zone_low, row.entry_zone_high],
+        invalidation: row.invalidation_price,
+        target: row.target_price,
+        timeframe: row.timeframe,
+        correlation_notes: row.correlation_notes,
+        conviction: row.conviction,
       },
       expires_at: row.expires_at,
       created_at: row.created_at,
       resolved_at: row.resolved_at,
       tag: row.tag,
       tag_freetext: row.tag_freetext,
-      edited_size_pct: row.edited_size_pct,
+      // Return both original and edited values for the form
+      size_pct: row.size_pct,
+      entry_zone_low: row.entry_zone_low,
+      entry_zone_high: row.entry_zone_high,
+      invalidation_price: row.invalidation_price,
+      target_price: row.target_price,
+      conviction: row.conviction,
       model: row.model,
     });
   } catch (err) {
@@ -173,16 +199,57 @@ async function handleApprovalAction(
 ) {
   try {
     const { id } = req.params;
-    const { tag, freetext, edited_size_pct } = req.body;
+    const {
+      tag,
+      freetext,
+      edited_size_pct,
+      edited_entry_zone_low,
+      edited_entry_zone_high,
+      edited_invalidation_price,
+      edited_target_price,
+      edited_conviction,
+    } = req.body;
 
     if (!tag) return res.status(400).json({ error: "tag is required" });
 
     if (action === "edit") {
-      if (edited_size_pct === undefined) {
-        return res.status(400).json({ error: "edited_size_pct is required" });
+      // Validate all required fields for edit
+      const requiredFields = {
+        edited_size_pct,
+        edited_entry_zone_low,
+        edited_entry_zone_high,
+        edited_invalidation_price,
+        edited_target_price,
+        edited_conviction,
+      };
+
+      for (const [field, value] of Object.entries(requiredFields)) {
+        if (value === undefined || value === null) {
+          return res.status(400).json({ error: `${field} is required` });
+        }
       }
-      if (typeof edited_size_pct !== "number" || edited_size_pct <= 0) {
-        return res.status(400).json({ error: "edited_size_pct must be a positive number" });
+
+      // Validate types and ranges
+      if (typeof edited_size_pct !== "number" || edited_size_pct <= 0 || edited_size_pct > 10) {
+        return res.status(400).json({ error: "edited_size_pct must be between 0 and 10" });
+      }
+      if (typeof edited_entry_zone_low !== "number" || edited_entry_zone_low <= 0) {
+        return res.status(400).json({ error: "edited_entry_zone_low must be positive" });
+      }
+      if (typeof edited_entry_zone_high !== "number" || edited_entry_zone_high <= 0) {
+        return res.status(400).json({ error: "edited_entry_zone_high must be positive" });
+      }
+      if (edited_entry_zone_low > edited_entry_zone_high) {
+        return res.status(400).json({ error: "edited_entry_zone_low must be <= edited_entry_zone_high" });
+      }
+      if (typeof edited_invalidation_price !== "number" || edited_invalidation_price <= 0) {
+        return res.status(400).json({ error: "edited_invalidation_price must be positive" });
+      }
+      if (typeof edited_target_price !== "number" || edited_target_price <= 0) {
+        return res.status(400).json({ error: "edited_target_price must be positive" });
+      }
+      if (typeof edited_conviction !== "number" || !Number.isInteger(edited_conviction) || edited_conviction < 1 || edited_conviction > 5) {
+        return res.status(400).json({ error: "edited_conviction must be an integer between 1 and 5" });
       }
     }
 
@@ -217,7 +284,10 @@ async function handleApprovalAction(
     const updateSql =
       action === "edit"
         ? `UPDATE pending_approvals
-             SET status = 'edited', tag = $2, tag_freetext = $3, edited_size_pct = $4, resolved_at = NOW()
+             SET status = 'edited', tag = $2, tag_freetext = $3,
+                 edited_size_pct = $4, edited_entry_zone_low = $5, edited_entry_zone_high = $6,
+                 edited_invalidation_price = $7, edited_target_price = $8, edited_conviction = $9,
+                 resolved_at = NOW()
              WHERE id = $1 RETURNING *`
         : `UPDATE pending_approvals
              SET status = $4, tag = $2, tag_freetext = $3, resolved_at = NOW()
@@ -225,7 +295,17 @@ async function handleApprovalAction(
 
     const updateParams =
       action === "edit"
-        ? [id, tag, freetext || null, edited_size_pct]
+        ? [
+            id,
+            tag,
+            freetext || null,
+            edited_size_pct,
+            edited_entry_zone_low,
+            edited_entry_zone_high,
+            edited_invalidation_price,
+            edited_target_price,
+            edited_conviction,
+          ]
         : [id, tag, freetext || null, targetStatus];
 
     const updateResult = await query(updateSql, updateParams);
@@ -236,6 +316,11 @@ async function handleApprovalAction(
       tag: updated.tag,
       tag_freetext: updated.tag_freetext,
       edited_size_pct: updated.edited_size_pct,
+      edited_entry_zone_low: updated.edited_entry_zone_low,
+      edited_entry_zone_high: updated.edited_entry_zone_high,
+      edited_invalidation_price: updated.edited_invalidation_price,
+      edited_target_price: updated.edited_target_price,
+      edited_conviction: updated.edited_conviction,
       resolved_at: updated.resolved_at,
     });
   } catch (err) {

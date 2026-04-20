@@ -22,12 +22,16 @@ export interface EvalFixture {
     classification: string;
     reasoning: string;
     thesis_delta: string | null;
-    action: {
+    trade_plan: {
       side: string;
       coin: string;
       size_pct: number;
-      invalidation: string;
-      time_horizon: string;
+      entry_zone: [number, number];
+      invalidation: number;
+      target: number;
+      timeframe: string;
+      correlation_notes: string;
+      conviction: number;
     } | null;
   };
   // Component metrics
@@ -83,8 +87,13 @@ export async function exportEvalFixtures(since?: Date, limit: number = 1000): Pr
        pd.side,
        pd.coin,
        pd.size_pct,
-       pd.invalidation,
-       pd.time_horizon,
+       pd.entry_zone_low,
+       pd.entry_zone_high,
+       pd.invalidation_price,
+       pd.target_price,
+       pd.timeframe,
+       pd.correlation_notes,
+       pd.conviction,
        pd.created_at as decision_time,
        -- Event
        e.type as event_type,
@@ -176,13 +185,17 @@ export async function exportEvalFixtures(since?: Date, limit: number = 1000): Pr
         classification: row.classification,
         reasoning: row.reasoning,
         thesis_delta: row.thesis_delta,
-        action: row.side
+        trade_plan: row.side
           ? {
               side: row.side,
               coin: row.coin,
               size_pct: parseFloat(row.size_pct),
-              invalidation: row.invalidation,
-              time_horizon: row.time_horizon,
+              entry_zone: [parseFloat(row.entry_zone_low), parseFloat(row.entry_zone_high)],
+              invalidation: parseFloat(row.invalidation_price),
+              target: parseFloat(row.target_price),
+              timeframe: row.timeframe,
+              correlation_notes: row.correlation_notes,
+              conviction: row.conviction,
             }
           : null,
       },

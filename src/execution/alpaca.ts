@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { PortfolioState } from "../types.js";
+import { PortfolioState, TradePlan } from "../types.js";
 import { fetchQuote } from "../ingestion/finnhub.js";
 
 const ALPACA_BASE = "https://paper-api.alpaca.markets";
@@ -165,16 +165,16 @@ export async function queryPortfolioState(): Promise<PortfolioState> {
 export async function executeApprovedTrade(approval: {
   id: string;
   decision_id: string;
-  action: { side: "buy" | "sell"; coin: string; size_pct: number };
+  trade_plan: TradePlan;
 }): Promise<{ alpaca_order_id: string; entry_price: number }> {
   try {
     const portfolio = await queryPortfolioState();
 
     // Get current price for the coin
-    const currentPrice = await getCurrentPrice(approval.action.coin);
+    const currentPrice = await getCurrentPrice(approval.trade_plan.coin);
 
     // Calculate order quantity: (portfolio.totalValue * size_pct / 100) / current_price
-    const positionValue = (portfolio.totalValue * approval.action.size_pct) / 100;
+    const positionValue = (portfolio.totalValue * approval.trade_plan.size_pct) / 100;
     const qty = Math.floor(positionValue / currentPrice);
 
     if (qty <= 0) {
@@ -183,10 +183,10 @@ export async function executeApprovedTrade(approval: {
       );
     }
 
-    const symbol = `${approval.action.coin.toUpperCase()}USDT`;
+    const symbol = `${approval.trade_plan.coin.toUpperCase()}USDT`;
 
     console.log(
-      `[Alpaca] Executing trade (approval_id: ${approval.id}): ${approval.action.side.toUpperCase()} ${qty} ${symbol} at estimated ${currentPrice}`
+      `[Alpaca] Executing trade (approval_id: ${approval.id}): ${approval.trade_plan.side.toUpperCase()} ${qty} ${symbol} at estimated ${currentPrice}`
     );
 
     const order = await retryWithBackoff(async () =>
@@ -200,7 +200,7 @@ export async function executeApprovedTrade(approval: {
       }>("/v2/orders", "POST", {
         symbol,
         qty,
-        side: approval.action.side,
+        side: approval.trade_plan.side,
         type: "market",
         time_in_force: "day",
       })

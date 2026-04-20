@@ -485,7 +485,7 @@
     <!-- Edit Modal -->
     <div id="editModal" class="modal-overlay">
         <div class="modal">
-            <div class="modal-header"><h2>Edit Size &amp; Approve</h2></div>
+            <div class="modal-header"><h2>Edit Trade Plan &amp; Approve</h2></div>
             <div class="modal-body">
                 <div class="form-group">
                     <label for="edit_tag">Reason</label>
@@ -498,8 +498,28 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="edit_size">New Size %</label>
-                    <input type="number" id="edit_size" step="0.1" min="0.1" max="10" placeholder="Enter new size...">
+                    <label for="edit_size">Size %</label>
+                    <input type="number" id="edit_size" step="0.1" min="0.1" max="10" placeholder="Enter size...">
+                </div>
+                <div class="form-group">
+                    <label for="edit_entry_low">Entry Zone Low</label>
+                    <input type="number" id="edit_entry_low" step="0.01" placeholder="Entry zone low price...">
+                </div>
+                <div class="form-group">
+                    <label for="edit_entry_high">Entry Zone High</label>
+                    <input type="number" id="edit_entry_high" step="0.01" placeholder="Entry zone high price...">
+                </div>
+                <div class="form-group">
+                    <label for="edit_invalidation">Invalidation Price</label>
+                    <input type="number" id="edit_invalidation" step="0.01" placeholder="Invalidation price...">
+                </div>
+                <div class="form-group">
+                    <label for="edit_target">Target Price</label>
+                    <input type="number" id="edit_target" step="0.01" placeholder="Target price...">
+                </div>
+                <div class="form-group">
+                    <label for="edit_conviction">Conviction (1-5)</label>
+                    <input type="number" id="edit_conviction" step="1" min="1" max="5" placeholder="Conviction level...">
                 </div>
                 <div class="form-group">
                     <label for="edit_freetext">Notes (optional)</label>
@@ -565,9 +585,28 @@
         })();
 
         // Approval modals
-        function openModal(type, approvalId) {
+        async function openModal(type, approvalId) {
             currentApprovalId = approvalId;
-            document.getElementById(type + 'Modal').classList.add('active');
+            const modal = document.getElementById(type + 'Modal');
+            modal.classList.add('active');
+
+            // For edit modal, pre-fill fields from the approval item
+            if (type === 'edit') {
+                try {
+                    const res = await fetch(`/approvals/${approvalId}`, { headers: { 'HX-Request': 'true' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        document.getElementById('edit_size').value = data.size_pct || '';
+                        document.getElementById('edit_entry_low').value = data.entry_zone_low || '';
+                        document.getElementById('edit_entry_high').value = data.entry_zone_high || '';
+                        document.getElementById('edit_invalidation').value = data.invalidation_price || '';
+                        document.getElementById('edit_target').value = data.target_price || '';
+                        document.getElementById('edit_conviction').value = data.conviction || '';
+                    }
+                } catch (err) {
+                    console.error('Failed to pre-fill edit modal:', err);
+                }
+            }
         }
 
         function closeModal() {
@@ -644,8 +683,26 @@
 
             if (type === 'edit') {
                 const size = parseFloat(document.getElementById('edit_size').value);
+                const entryLow = parseFloat(document.getElementById('edit_entry_low').value);
+                const entryHigh = parseFloat(document.getElementById('edit_entry_high').value);
+                const invalidation = parseFloat(document.getElementById('edit_invalidation').value);
+                const target = parseFloat(document.getElementById('edit_target').value);
+                const conviction = parseInt(document.getElementById('edit_conviction').value);
+
                 if (!size || size <= 0) { alert('Please enter a valid size'); return; }
+                if (!entryLow || entryLow <= 0) { alert('Please enter a valid entry zone low'); return; }
+                if (!entryHigh || entryHigh <= 0) { alert('Please enter a valid entry zone high'); return; }
+                if (entryLow > entryHigh) { alert('Entry zone low must be <= high'); return; }
+                if (!invalidation || invalidation <= 0) { alert('Please enter a valid invalidation price'); return; }
+                if (!target || target <= 0) { alert('Please enter a valid target price'); return; }
+                if (!conviction || conviction < 1 || conviction > 5) { alert('Conviction must be 1-5'); return; }
+
                 body.edited_size_pct = size;
+                body.edited_entry_zone_low = entryLow;
+                body.edited_entry_zone_high = entryHigh;
+                body.edited_invalidation_price = invalidation;
+                body.edited_target_price = target;
+                body.edited_conviction = conviction;
             }
 
             try {

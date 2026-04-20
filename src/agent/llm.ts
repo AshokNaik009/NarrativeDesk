@@ -51,6 +51,14 @@ Respond with ONLY valid JSON: {"rating": <1-5>, "reasoning": "<brief explanation
 
 const GEMINI_MODEL = "gemini-flash-latest"; // Use flash-latest for best compatibility
 
+const OPENROUTER_FREE_MODELS = [
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nvidia/llama-3.1-nemotron-70b-instruct:free",
+  "qwen/qwen-2.5-72b-instruct:free",
+  "google/gemini-2.0-flash-exp:free",
+  "meta-llama/llama-3.1-70b-instruct:free",
+];
+
 async function callMainAgentGroq(
   userPrompt: string
 ): Promise<{ content: string; tokens: { prompt: number; completion: number } } | null> {
@@ -84,36 +92,70 @@ async function callMainAgentGroq(
 async function callMainAgentOpenRouter(
   userPrompt: string
 ): Promise<{ content: string; tokens: { prompt: number; completion: number } }> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.openRouterApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "meta-llama/llama-3.3-70b-instruct",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      response_format: { type: "json_object" },
-    }),
-  });
+  const attempts: Array<{ model: string; error: string }> = [];
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+  for (const model of OPENROUTER_FREE_MODELS) {
+    try {
+      console.log(`[Agent] Trying OpenRouter model: ${model}`);
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.openRouterApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          max_tokens: 1024,
+          messages: [
+            { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const status = response.status;
+
+        // Don't retry on auth errors
+        if (status === 401 || status === 403) {
+          throw new Error(`OpenRouter auth error: ${status} ${errorText}`);
+        }
+
+        // Log and try next model
+        attempts.push({ model, error: `${status} ${errorText}` });
+        console.warn(`[Agent] Model ${model} failed (${status}), trying next...`);
+        continue;
+      }
+
+      const data = (await response.json()) as any;
+      const content = data.choices?.[0]?.message?.content || "";
+      const tokens = {
+        prompt: data.usage?.prompt_tokens || 0,
+        completion: data.usage?.completion_tokens || 0,
+      };
+
+      console.log(`[Agent] OpenRouter model ${model} succeeded`);
+      return { content, tokens };
+    } catch (err: any) {
+      const errorMsg = err.message || String(err);
+
+      // Auth errors are fatal
+      if (errorMsg.includes("auth error")) {
+        throw err;
+      }
+
+      // Log other errors and try next model
+      attempts.push({ model, error: errorMsg });
+      console.warn(`[Agent] Model ${model} error: ${errorMsg.slice(0, 100)}`);
+    }
   }
 
-  const data = (await response.json()) as any;
-  const content = data.choices?.[0]?.message?.content || "";
-  const tokens = {
-    prompt: data.usage?.prompt_tokens || 0,
-    completion: data.usage?.completion_tokens || 0,
-  };
-
-  return { content, tokens };
+  // All models exhausted
+  const attemptDetails = attempts.map((a) => `${a.model}: ${a.error}`).join("; ");
+  throw new Error(`All OpenRouter free models failed: ${attemptDetails}`);
 }
 
 export async function invokeMainAgent(

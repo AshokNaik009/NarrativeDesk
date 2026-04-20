@@ -1,11 +1,5 @@
-import { GuardrailResult, PortfolioState, TradeHistoryEntry } from "../types.js";
+import { GuardrailResult, PortfolioState, TradeHistoryEntry, TradePlan } from "../types.js";
 import { config } from "../config.js";
-
-interface ProposedAction {
-  side: "buy" | "sell";
-  coin: string;
-  size_pct: number;
-}
 
 interface GuardrailConfig {
   maxPositionPct: number;
@@ -24,15 +18,15 @@ const DEFAULT_GUARDRAIL_CONFIG: GuardrailConfig = {
 };
 
 export function evaluateGuardrails(
-  action: ProposedAction,
+  tradePlan: TradePlan,
   portfolio: PortfolioState,
   tradeHistory: TradeHistoryEntry[],
   now: Date = new Date(),
   cfg: GuardrailConfig = DEFAULT_GUARDRAIL_CONFIG
 ): GuardrailResult {
   // 1. Max position size
-  if (action.size_pct > cfg.maxPositionPct) {
-    return { allowed: false, reason: `size ${action.size_pct}% exceeds max ${cfg.maxPositionPct}%` };
+  if (tradePlan.size_pct > cfg.maxPositionPct) {
+    return { allowed: false, reason: `size ${tradePlan.size_pct}% exceeds max ${cfg.maxPositionPct}%` };
   }
 
   // 2. Max concurrent positions
@@ -54,13 +48,28 @@ export function evaluateGuardrails(
   const cooldownMs = cfg.cooldownMinutes * 60 * 1000;
   const cooldownCutoff = new Date(now.getTime() - cooldownMs);
   const recentSameCoin = tradeHistory.find(
-    (t) => t.coin === action.coin && t.executedAt > cooldownCutoff
+    (t) => t.coin === tradePlan.coin && t.executedAt > cooldownCutoff
   );
   if (recentSameCoin) {
     const minutesAgo = Math.round((now.getTime() - recentSameCoin.executedAt.getTime()) / 60000);
     return {
       allowed: false,
-      reason: `${action.coin} traded ${minutesAgo}m ago, cooldown is ${cfg.cooldownMinutes}m`,
+      reason: `${tradePlan.coin} traded ${minutesAgo}m ago, cooldown is ${cfg.cooldownMinutes}m`,
+    };
+  }
+
+  // 5. Invalidation on wrong side of entry
+  const [entryLow, entryHigh] = tradePlan.entry_zone;
+  if (tradePlan.side === "buy" && tradePlan.invalidation >= entryLow) {
+    return {
+      allowed: false,
+      reason: `buy invalidation ${tradePlan.invalidation} must be below entry zone low ${entryLow}`,
+    };
+  }
+  if (tradePlan.side === "sell" && tradePlan.invalidation <= entryHigh) {
+    return {
+      allowed: false,
+      reason: `sell invalidation ${tradePlan.invalidation} must be above entry zone high ${entryHigh}`,
     };
   }
 

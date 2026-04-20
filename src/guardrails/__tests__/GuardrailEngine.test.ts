@@ -11,7 +11,18 @@ const emptyPortfolio: PortfolioState = {
 const now = new Date("2025-01-15T12:00:00Z");
 
 function makeAction(overrides = {}) {
-  return { side: "buy" as const, coin: "BTC", size_pct: 5, ...overrides };
+  return {
+    side: "buy" as const,
+    coin: "BTC",
+    size_pct: 5,
+    entry_zone: [42000, 42500] as [number, number],
+    invalidation: 41500,
+    target: 43500,
+    timeframe: "swing" as const,
+    correlation_notes: "BTC beta 1.0",
+    conviction: 3,
+    ...overrides,
+  };
 }
 
 describe("evaluateGuardrails", () => {

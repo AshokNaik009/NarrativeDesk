@@ -215,7 +215,10 @@ activityRouter.get("/activity/event/:eventId", async (req, res) => {
       [eventId]
     );
     const decRes = await query(
-      `SELECT id, classification, reasoning, coin, side, size_pct, invalidation, thesis_delta, created_at
+      `SELECT id, classification, reasoning, coin, side, size_pct,
+              entry_zone_low, entry_zone_high, invalidation_price, target_price,
+              timeframe, correlation_notes, conviction,
+              thesis_delta, created_at
        FROM proposed_decisions WHERE agent_invocation_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
       [invRes.rows.map((r) => r.id)]
     );
@@ -252,10 +255,23 @@ activityRouter.get("/activity/event/:eventId", async (req, res) => {
       html += `<div style="margin-top:16px;"><div style="font-size:11px;color:#8b949e;text-transform:uppercase;margin-bottom:6px;">Decisions</div>`;
       for (const d of decRes.rows) {
         const actionText = d.side ? ` &middot; ${d.side.toUpperCase()} ${d.size_pct}% ${d.coin}` : "";
+        const entryZone = d.entry_zone_low !== null && d.entry_zone_high !== null
+          ? `$${parseFloat(d.entry_zone_low).toFixed(2)} – $${parseFloat(d.entry_zone_high).toFixed(2)}`
+          : null;
+        const invPrice = d.invalidation_price !== null ? `$${parseFloat(d.invalidation_price).toFixed(2)}` : null;
+        const tgtPrice = d.target_price !== null ? `$${parseFloat(d.target_price).toFixed(2)}` : null;
+        const planBits = [
+          entryZone ? `Entry: ${entryZone}` : null,
+          invPrice ? `Invalidation: ${invPrice}` : null,
+          tgtPrice ? `Target: ${tgtPrice}` : null,
+          d.timeframe ? `Timeframe: ${esc(d.timeframe)}` : null,
+          d.conviction !== null ? `Conviction: ${d.conviction}/5` : null,
+        ].filter(Boolean).join(" &middot; ");
         html += `<div style="padding:8px 0;border-bottom:1px solid #21262d;">
           <div style="font-size:12px;"><strong style="color:#d29922;">${esc(d.classification)}</strong>${actionText}</div>
           <div style="font-size:12px;color:#c9d1d9;margin-top:4px;">${esc(d.reasoning)}</div>
-          ${d.invalidation ? `<div style="font-size:11px;color:#8b949e;margin-top:4px;">Invalidation: ${esc(d.invalidation)}</div>` : ""}
+          ${planBits ? `<div style="font-size:11px;color:#8b949e;margin-top:4px;">${planBits}</div>` : ""}
+          ${d.correlation_notes ? `<div style="font-size:11px;color:#8b949e;margin-top:4px;">Correlation: ${esc(d.correlation_notes)}</div>` : ""}
           ${d.thesis_delta && d.thesis_delta !== "no change" ? `<div style="font-size:11px;color:#8b949e;margin-top:4px;">Thesis: ${esc(d.thesis_delta)}</div>` : ""}
         </div>`;
       }

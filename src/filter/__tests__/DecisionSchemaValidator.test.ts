@@ -24,23 +24,27 @@ describe("validateDecision", () => {
       expect(result.success).toBe(true);
     });
 
-    it("accepts valid act decision with action", () => {
+    it("accepts valid act decision with trade_plan", () => {
       const result = validateDecision({
         classification: "act",
         reasoning: "Strong bullish signal on confirmed news",
         thesis_delta: "BTC breakout thesis confirmed",
-        action: {
+        trade_plan: {
           side: "buy",
           coin: "BTC",
           size_pct: 5,
-          invalidation: "price drops below 60000",
-          time_horizon: "4h",
+          entry_zone: [60000, 61000],
+          invalidation: 59000,
+          target: 62000,
+          timeframe: "swing",
+          correlation_notes: "BTC beta 1.0",
+          conviction: 4,
         },
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.action?.side).toBe("buy");
-        expect(result.data.action?.coin).toBe("BTC");
+        expect(result.data.trade_plan?.side).toBe("buy");
+        expect(result.data.trade_plan?.coin).toBe("BTC");
       }
     });
   });
@@ -147,22 +151,26 @@ describe("validateDecision", () => {
   });
 
   describe("business rules", () => {
-    it("strips action from non-act classification", () => {
+    it("strips trade_plan from non-act classification", () => {
       const result = validateDecision({
         classification: "ignore",
-        reasoning: "Not relevant but LLM added action anyway",
+        reasoning: "Not relevant but LLM added trade_plan anyway",
         thesis_delta: "no change",
-        action: {
+        trade_plan: {
           side: "buy",
           coin: "BTC",
           size_pct: 5,
-          invalidation: "price drops below 60k",
-          time_horizon: "4h",
+          entry_zone: [60000, 61000],
+          invalidation: 59000,
+          target: 62000,
+          timeframe: "swing",
+          correlation_notes: "BTC beta 1.0",
+          conviction: 4,
         },
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.action).toBeUndefined();
+        expect(result.data.trade_plan).toBeUndefined();
       }
     });
   });

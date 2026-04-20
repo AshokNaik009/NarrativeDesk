@@ -30,14 +30,14 @@ export function validateDecision(rawOutput: unknown): ValidationResult {
     return { success: false, error: `Schema validation failed: ${issues}` };
   }
 
-  // Business rule: action must be present only when classification is "act"
-  if (result.data.classification === "act" && !result.data.action) {
-    return { success: false, error: "classification is 'act' but no action provided" };
+  // Business rule: trade_plan must be present only when classification is "act"
+  if (result.data.classification === "act" && !result.data.trade_plan) {
+    return { success: false, error: "classification is 'act' but no trade_plan provided" };
   }
 
-  if (result.data.classification !== "act" && result.data.action) {
-    // Silently strip action if classification isn't "act"
-    return { success: true, data: { ...result.data, action: undefined } };
+  if (result.data.classification !== "act" && result.data.trade_plan) {
+    // Silently strip trade_plan if classification isn't "act"
+    return { success: true, data: { ...result.data, trade_plan: undefined } };
   }
 
   return { success: true, data: result.data };

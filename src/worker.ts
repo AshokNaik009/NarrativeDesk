@@ -213,10 +213,10 @@ async function processEvent(event: Event) {
                   {
                     classification: d.classification,
                     reasoning: d.reasoning,
-                    coin: d.action?.coin ?? null,
-                    side: d.action?.side ?? null,
-                    size_pct: d.action?.size_pct ?? null,
-                    invalidation: d.action?.invalidation ?? null,
+                    coin: d.trade_plan?.coin ?? null,
+                    side: d.trade_plan?.side ?? null,
+                    size_pct: d.trade_plan?.size_pct ?? null,
+                    invalidation: d.trade_plan?.invalidation ? `$${d.trade_plan.invalidation.toFixed(2)}` : null,
                   },
                   { headline: evt.headline ?? null, source: evt.source ?? null }
                 );
@@ -266,7 +266,12 @@ async function executionLoop() {
   try {
     // Query for approved trades that haven't been executed yet
     const approvalResult = await query(
-      `SELECT pa.id, pa.decision_id, pd.side, pd.coin, pd.size_pct, pa.created_at
+      `SELECT pa.id, pa.decision_id,
+              pd.side, pd.coin, pd.size_pct,
+              pd.entry_zone_low, pd.entry_zone_high,
+              pd.invalidation_price, pd.target_price,
+              pd.timeframe, pd.correlation_notes, pd.conviction,
+              pa.created_at
        FROM pending_approvals pa
        JOIN proposed_decisions pd ON pa.decision_id = pd.id
        WHERE pa.status = 'approved'
@@ -282,17 +287,23 @@ async function executionLoop() {
         const execResult = await executeApprovedTrade({
           id: approval.id,
           decision_id: approval.decision_id,
-          action: {
+          trade_plan: {
             side: approval.side,
             coin: approval.coin,
             size_pct: approval.size_pct,
+            entry_zone: [approval.entry_zone_low, approval.entry_zone_high],
+            invalidation: approval.invalidation_price,
+            target: approval.target_price,
+            timeframe: approval.timeframe,
+            correlation_notes: approval.correlation_notes,
+            conviction: approval.conviction,
           },
         });
 
         // Insert executed trade record
         await query(
           `INSERT INTO executed_trades (approval_id, side, coin, size_pct, entry_price, invalidation, created_at)
-           SELECT $1, pd.side, pd.coin, pd.size_pct, $2, pd.invalidation, NOW()
+           SELECT $1, pd.side, pd.coin, pd.size_pct, $2, pd.invalidation_price, NOW()
            FROM proposed_decisions pd
            WHERE pd.id = $3`,
           [approval.id, execResult.entry_price, approval.decision_id]

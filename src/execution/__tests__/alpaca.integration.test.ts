@@ -65,7 +65,17 @@ describe("Alpaca execution adapter", () => {
       const result = await executeApprovedTrade({
         id: "approval-1",
         decision_id: "decision-1",
-        action: { side: "buy", coin: "BTC", size_pct: 5 },
+        trade_plan: {
+          side: "buy",
+          coin: "BTC",
+          size_pct: 5,
+          entry_zone: [42000, 42500],
+          invalidation: 41500,
+          target: 43500,
+          timeframe: "swing",
+          correlation_notes: "BTC beta 1.0",
+          conviction: 3,
+        },
       });
 
       expect(result.alpaca_order_id).toBe("order-abc");
@@ -93,7 +103,17 @@ describe("Alpaca execution adapter", () => {
       await executeApprovedTrade({
         id: "approval-2",
         decision_id: "decision-2",
-        action: { side: "buy", coin: "ETH", size_pct: 3 },
+        trade_plan: {
+          side: "buy",
+          coin: "ETH",
+          size_pct: 3,
+          entry_zone: [2300, 2350],
+          invalidation: 2250,
+          target: 2450,
+          timeframe: "swing",
+          correlation_notes: "ETH alt strength",
+          conviction: 3,
+        },
       });
 
       // Check all Alpaca calls have auth headers
@@ -115,7 +135,17 @@ describe("Alpaca execution adapter", () => {
         executeApprovedTrade({
           id: "approval-3",
           decision_id: "decision-3",
-          action: { side: "buy", coin: "BTC", size_pct: 1 },
+          trade_plan: {
+            side: "buy",
+            coin: "BTC",
+            size_pct: 1,
+            entry_zone: [42000, 42500],
+            invalidation: 41500,
+            target: 43500,
+            timeframe: "swing",
+            correlation_notes: "BTC beta 1.0",
+            conviction: 3,
+          },
         })
       ).rejects.toThrow("Invalid order quantity");
     });
@@ -128,7 +158,17 @@ describe("Alpaca execution adapter", () => {
       const result = await executeApprovedTrade({
         id: "approval-4",
         decision_id: "decision-4",
-        action: { side: "sell", coin: "BTC", size_pct: 5 },
+        trade_plan: {
+          side: "sell",
+          coin: "BTC",
+          size_pct: 5,
+          entry_zone: [42000, 42500],
+          invalidation: 43500,
+          target: 41500,
+          timeframe: "swing",
+          correlation_notes: "BTC shorting setup",
+          conviction: 3,
+        },
       });
 
       expect(result.entry_price).toBe(97500.25);
@@ -165,7 +205,17 @@ describe("Alpaca execution adapter", () => {
       const result = await executeApprovedTrade({
         id: "approval-5",
         decision_id: "decision-5",
-        action: { side: "buy", coin: "BTC", size_pct: 5 },
+        trade_plan: {
+          side: "buy",
+          coin: "BTC",
+          size_pct: 5,
+          entry_zone: [42000, 42500],
+          invalidation: 41500,
+          target: 43500,
+          timeframe: "swing",
+          correlation_notes: "BTC beta 1.0",
+          conviction: 3,
+        },
       });
 
       expect(result.alpaca_order_id).toBe("order-retry");

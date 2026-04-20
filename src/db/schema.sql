@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS pending_approvals (
   tag VARCHAR(50),
   tag_freetext TEXT,
   edited_size_pct NUMERIC(5,2),
+  edited_entry_zone_low NUMERIC(20,8),
+  edited_entry_zone_high NUMERIC(20,8),
+  edited_invalidation_price NUMERIC(20,8),
+  edited_target_price NUMERIC(20,8),
+  edited_conviction SMALLINT CHECK (edited_conviction BETWEEN 1 AND 5),
   expires_at TIMESTAMPTZ NOT NULL,
   resolved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

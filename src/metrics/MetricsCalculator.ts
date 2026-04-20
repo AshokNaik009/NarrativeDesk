@@ -154,7 +154,7 @@ export async function computeLayer3(since?: Date): Promise<Layer3Metrics> {
        et.close_reason,
        et.closed_at,
        et.created_at,
-       pd.invalidation
+       pd.invalidation_price
      FROM executed_trades et
      JOIN pending_approvals pa ON et.approval_id = pa.id
      JOIN proposed_decisions pd ON pa.decision_id = pd.id
