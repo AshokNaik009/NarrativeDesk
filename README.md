@@ -12,7 +12,7 @@ This is a reference implementation, not a trading system. Before using or extend
 
 - **Latency floor**: LLM inference adds ~3–10s per decision. Crypto edge windows are milliseconds to seconds; this pipeline will always miss them.
 - **Venue mismatch**: Alpaca paper trading does not reflect crypto microstructure (no funding, liquidations, leverage, or proper slippage). Any reported returns are not transferable to real trading.
-- **News alone is weak**: By the time headlines appear, positioning has usually moved. Phase 2 will add crypto-native signals (funding, liquidations, on-chain).
+- **News alone is weak**: By the time headlines appear, positioning has usually moved. ✓ Phase 2 now adds crypto-native signals (funding, liquidations, on-chain) as primary triggers.
 - **No backtest evidence**: The pipeline has never been replayed against historical data. Performance claims are speculative until Phase 3 lands.
 - **HITL approval biases**: Human decisions are logged but not yet analyzed for systematic bias (time-of-day, thesis-type, conviction). Phase 4 will quantify this.
 
@@ -26,10 +26,13 @@ NarrativeDesk is a five-layer pipeline. Each layer is independently testable, ha
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  LAYER 0 — INGESTION                                                 │
+│  LAYER 0 — INGESTION (News + Crypto Signals)                         │
 ├──────────────────────────────────────────────────────────────────────┤
-│  Finnhub News (60s REST poll)   │   Binance WebSocket (tick prices)  │
-│  → src/ingestion/finnhub.ts     │   → src/ingestion/binance.ts       │
+│  News:                       │  Crypto-Native Signals:              │
+│  • Finnhub (60s)             │  • Binance Funding Rates (5m)        │
+│  • Price feed WebSocket      │  • Liquidation Cascades (real-time)  │
+│                              │  • DefiLlama Stablecoin Spikes (15m) │
+│                              │  • Etherscan Whale Transfers (5m)    │
 └──────────────────────────────────┬───────────────────────────────────┘
                                    ▼
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -44,10 +47,11 @@ NarrativeDesk is a five-layer pipeline. Each layer is independently testable, ha
 ┌──────────────────────────────────────────────────────────────────────┐
 │  LAYER 2 — REASONING                                                 │
 ├──────────────────────────────────────────────────────────────────────┤
-│  Main Agent — Groq Llama 3.3 70B  →  OpenRouter fallback             │
+│  Main Agent — Groq Llama 3.3 70B  →  OpenRouter free-model fallback  │
 │  Output (Zod-validated JSON):                                        │
 │    { classification: ignore | monitor | act,                         │
-│      reasoning, thesis_delta, action }                               │
+│      reasoning, thesis_delta, trade_plan }                           │
+│  (trade_plan: entry_zone, invalidation, target, timeframe, conviction) │
 └──────────────────────────────────┬───────────────────────────────────┘
                                    ▼
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -106,14 +110,14 @@ NarrativeDesk is a five-layer pipeline. Each layer is independently testable, ha
 
 The full phased plan lives in **[`docs/ROADMAP.md`](docs/ROADMAP.md)**. These phases turn the reference implementation into a defensible decision-logger and research tool:
 
-| Phase | Title | Effort | Addresses |
+| Phase | Title | Status | Addresses |
 |-------|-------|--------|-----------|
-| 0 | Honest reframing (README + `LIMITATIONS.md`) | 0.5 day | ✓ Complete |
-| 1 | Structured `TradePlan` schema (entry/invalidation/target/size/conviction) | 1–2 days | Coarse signals → measurable R-multiples |
-| 2 | Crypto-native signals (Binance funding/OI/liquidations, DefiLlama, Etherscan) | ~1 week | News-only weakness |
-| 3 | Backtest harness replaying stored events vs. HODL | 3–5 days | No backtest evidence |
-| 4 | Decision-logger / bias analyzer dashboard | 2–3 days | HITL approval biases |
-| 5 | Hyperliquid / Bybit testnet execution adapter *(optional)* | 2–3 days | Venue mismatch |
+| 0 | Honest reframing (README + `LIMITATIONS.md`) | ✅ Complete | Repositioned as HITL reference + decision-logger |
+| 1 | Structured `TradePlan` schema (entry/invalidation/target/size/conviction) | ✅ Complete | Coarse signals → measurable R-multiples + Edit modal |
+| 2 | Crypto-native signals (Binance funding/OI/liquidations, DefiLlama, Etherscan) | ✅ Complete | News-only weakness → 5× signal cadence |
+| 3 | Backtest harness replaying stored events vs. HODL | ⏳ In progress | No backtest evidence yet |
+| 4 | Decision-logger / bias analyzer dashboard | To-do | HITL approval biases (time-of-day, conviction, thesis-type) |
+| 5 | Hyperliquid / Bybit testnet execution adapter *(optional)* | To-do | Venue mismatch (crypto perps, funding, liquidations visible) |
 
 To start a fresh session on any phase: `Begin Phase <N> from docs/ROADMAP.md`.
 
@@ -124,14 +128,14 @@ To start a fresh session on any phase: `Begin Phase <N> from docs/ROADMAP.md`.
 | Layer | Tech |
 |-------|------|
 | Server | Express 5, HTMX (server-rendered, no React/SPA) |
-| LLM - Main Agent | Groq Llama 3.3 70B (fallback: OpenRouter) |
+| LLM - Main Agent | Groq Llama 3.3 70B (fallback: OpenRouter free models) |
 | LLM - Credibility | Google Gemini 2.0 Flash (dual-key, per-cycle budget) |
 | Schema Validation | Zod (all LLM outputs validated) |
-| Database | PostgreSQL (12 tables, all indexed) |
-| Market Data | Finnhub (news), Binance WebSocket (prices) |
+| Database | PostgreSQL (15 tables, all indexed, full audit trail) |
+| Market Data | **News:** Finnhub (REST 60s) ⋄ **Crypto Signals:** Binance funding (5m), liquidations (real-time WebSocket), DefiLlama stables + DEX (15m), Etherscan whales (5m) |
 | Execution | Alpaca Paper Trading API |
 | Tests | Vitest (unit + integration, ESM) |
-| Language | TypeScript (strict mode, noUncheckedIndexedAccess) |
+| Language | TypeScript (strict mode, noUncheckedIndexedAccess, ESM) |
 
 ---
 

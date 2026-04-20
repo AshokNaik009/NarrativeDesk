@@ -2,6 +2,10 @@ import { config } from "./config.js";
 import { initDb, query } from "./db/client.js";
 import { fetchCryptoNews, persistEvent, persistFilterDecision, fetchQuote } from "./ingestion/finnhub.js";
 import { startBinanceWs } from "./ingestion/binance.js";
+import { fetchFundingRates } from "./ingestion/funding.js";
+import { startLiquidationWatcher } from "./ingestion/liquidations.js";
+import { fetchStablecoinSupply, fetchDexVolume } from "./ingestion/defillama.js";
+import { fetchWhaleBalanceChanges } from "./ingestion/etherscan.js";
 import { filterEvent } from "./filter/EventFilter.js";
 import { invokeMainAgent, invokeCredibilityAgent, logAgentInvocation, resetCredibilityCycleCount } from "./agent/llm.js";
 import { invokeCounterThesis, invokeTradePostmortem, logCounterThesis, logPostmortem } from "./agent/features.js";
@@ -261,6 +265,39 @@ async function pollNews() {
   }
 }
 
+// Crypto signal polling loop (funding, liquidations, on-chain)
+async function pollCryptoSignals() {
+  try {
+    // Funding rates (every 5 min)
+    const fundingEvents = await fetchFundingRates();
+    for (const event of fundingEvents) {
+      await processEvent(event);
+    }
+
+    // Stablecoin supply (every 5 min; called from 15min interval)
+    const stablecoinEvents = await fetchStablecoinSupply();
+    for (const event of stablecoinEvents) {
+      await processEvent(event);
+    }
+
+    // DEX volume (every 5 min; called from 15min interval)
+    const dexEvents = await fetchDexVolume();
+    for (const event of dexEvents) {
+      await processEvent(event);
+    }
+
+    // Whale balance changes (every 5 min; only if Etherscan key present)
+    if ((config as any).etherscanApiKey) {
+      const whaleEvents = await fetchWhaleBalanceChanges();
+      for (const event of whaleEvents) {
+        await processEvent(event);
+      }
+    }
+  } catch (err) {
+    console.error("[Worker] Error in crypto signal polling:", err);
+  }
+}
+
 // Execution loop: monitors approved trades and executes them
 async function executionLoop() {
   try {
@@ -479,6 +516,17 @@ async function main() {
     await processEvent(event);
   });
   console.log("[Worker] Binance WebSocket connected");
+
+  // Start Binance liquidation watcher (real-time, emits on cascade threshold)
+  startLiquidationWatcher(async (event) => {
+    await processEvent(event);
+  });
+  console.log("[Worker] Binance liquidation watcher started");
+
+  // Crypto signal polling (every 5 minutes: funding, on-chain)
+  await pollCryptoSignals();
+  setInterval(pollCryptoSignals, 5 * 60 * 1000);
+  console.log("[Worker] Crypto signal polling started (every 5min)");
 
   // Start execution loop (every 10 seconds)
   setInterval(executionLoop, 10 * 1000);

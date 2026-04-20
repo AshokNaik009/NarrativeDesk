@@ -14,6 +14,9 @@ export const config = {
   // Finnhub
   finnhubApiKey: process.env.FINHUB_API_KEY!,
 
+  // Etherscan (optional)
+  etherscanApiKey: process.env.ETHERSCAN_API_KEY || "",
+
   // Alpaca (stubbed for now)
   alpacaApiKey: process.env.ALPACA_API_KEY || "",
   alpacaApiSecret: process.env.ALPACA_API_SECRET || "",

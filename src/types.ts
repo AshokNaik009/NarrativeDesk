@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Unified event record
 export const EventSchema = z.object({
-  type: z.enum(["news", "price"]),
+  type: z.enum(["news", "price", "FundingRateSpike", "LiquidationCascade", "StablecoinMintSpike", "DexVolumeSpike", "WhaleBuyVol", "WhaleSellVol"]),
   source: z.string(),
   symbol: z.string().optional(),
   headline: z.string().optional(),
