@@ -12,6 +12,7 @@ import { metricsRouter } from "./routes/metrics.js";
 import { portfolioRouter } from "./routes/portfolio.js";
 import { pulseRouter } from "./routes/pulse.js";
 import { thesisRouter } from "./routes/thesis.js";
+import { biasRouter } from "./routes/bias.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,7 @@ app.use(thesisRouter);      // /thesis, /thesis/version/:id
 app.use(decisionsRouter);   // /decisions
 app.use(pulseRouter);       // /pulse
 app.use(chatRouter);        // GET/POST /chat
+app.use(biasRouter);        // /bias, /bias/json, /bias/report
 
 async function main() {
   await initDb();

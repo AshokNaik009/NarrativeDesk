@@ -17,9 +17,16 @@ export const config = {
   // Etherscan (optional)
   etherscanApiKey: process.env.ETHERSCAN_API_KEY || "",
 
-  // Alpaca (stubbed for now)
+  // Alpaca (equities paper trading)
   alpacaApiKey: process.env.ALPACA_API_KEY || "",
   alpacaApiSecret: process.env.ALPACA_API_SECRET || "",
+
+  // Bybit Testnet (crypto perps with leverage, funding, liquidations)
+  bybitTestnetKey: process.env.BYBIT_TESTNET_KEY || "",
+  bybitTestnetSecret: process.env.BYBIT_TESTNET_SECRET || "",
+
+  // Execution venue: "alpaca" (equities) or "bybit" (crypto perps)
+  executionVenue: (process.env.EXECUTION_VENUE || "alpaca") as "alpaca" | "bybit",
 
   // Server
   port: parseInt(process.env.PORT || "3000"),

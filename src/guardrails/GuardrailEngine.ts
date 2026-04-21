@@ -7,6 +7,7 @@ interface GuardrailConfig {
   maxTradesPer24h: number;
   cooldownMinutes: number;
   stopLossPct: number;
+  minLiquidationDistancePct?: number; // Only for perps/leverage (Bybit)
 }
 
 const DEFAULT_GUARDRAIL_CONFIG: GuardrailConfig = {
@@ -15,7 +16,33 @@ const DEFAULT_GUARDRAIL_CONFIG: GuardrailConfig = {
   maxTradesPer24h: config.maxTradesPer24h,
   cooldownMinutes: config.cooldownMinutes,
   stopLossPct: config.stopLossPct,
+  minLiquidationDistancePct: 2, // Min 2% cushion for perps
 };
+
+/**
+ * Map conviction (1-5) to max leverage (1-4x)
+ * conviction 1-2 → max 1x, 3 → max 2x, 4 → max 3x, 5 → max 4x
+ */
+function getMaxLeverageForConviction(conviction: number): number {
+  return Math.ceil(conviction / 1.5);
+}
+
+/**
+ * Calculate liquidation distance as a percentage
+ * Entry → invalidation distance as a % of entry price
+ * Liquidation ratio = (1 / leverage) * 100%
+ * Distance cushion = (distance to invalidation) / (liquidation ratio) * 100%
+ */
+function calculateLiquidationDistancePct(
+  leverage: number,
+  invalidationPrice: number,
+  entryPrice: number
+): number {
+  if (entryPrice === 0 || leverage === 0) return 0;
+  const liquidationRatioPct = (1 / leverage) * 100;
+  const distanceToInvalidationPct = Math.abs(invalidationPrice - entryPrice) / entryPrice * 100;
+  return (distanceToInvalidationPct / liquidationRatioPct) * 100;
+}
 
 export function evaluateGuardrails(
   tradePlan: TradePlan,
@@ -73,8 +100,31 @@ export function evaluateGuardrails(
     };
   }
 
+  // 6. For perps venues (Bybit): liquidation distance check
+  if (config.executionVenue === "bybit") {
+    const maxLev = getMaxLeverageForConviction(tradePlan.conviction);
+    const entryPrice = (tradePlan.entry_zone[0] + tradePlan.entry_zone[1]) / 2;
+    const minLiqDistPct = cfg.minLiquidationDistancePct || 2;
+    const actualLiqDistPct = calculateLiquidationDistancePct(maxLev, tradePlan.invalidation, entryPrice);
+
+    if (actualLiqDistPct < minLiqDistPct) {
+      return {
+        allowed: false,
+        reason: `liquidation distance ${actualLiqDistPct.toFixed(1)}% is too tight (min ${minLiqDistPct}% required) at ${maxLev}x leverage`,
+      };
+    }
+
+    // 7. Max leverage guardrail
+    if (maxLev > 4) {
+      return {
+        allowed: false,
+        reason: `conviction ${tradePlan.conviction} maps to leverage ${maxLev}x, exceeds max 4x`,
+      };
+    }
+  }
+
   return { allowed: true, reason: "all guardrails passed" };
 }
 
-export { DEFAULT_GUARDRAIL_CONFIG };
+export { DEFAULT_GUARDRAIL_CONFIG, calculateLiquidationDistancePct, getMaxLeverageForConviction };
 export type { GuardrailConfig };

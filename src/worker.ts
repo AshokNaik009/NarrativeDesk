@@ -12,7 +12,7 @@ import { invokeCounterThesis, invokeTradePostmortem, logCounterThesis, logPostmo
 import { getCurrentThesis, writeThesis, ensureThesisExists } from "./agent/thesis.js";
 import { evaluateGuardrails } from "./guardrails/GuardrailEngine.js";
 import { evaluateInvalidation, MarketState } from "./guardrails/InvalidationEvaluator.js";
-import { queryPortfolioState, executeApprovedTrade, closePosition, getOrderStatus } from "./execution/alpaca.js";
+import { queryPortfolioState, executeApprovedTrade, closePosition, getOrderStatus } from "./execution/index.js";
 import { Event, TradeHistoryEntry, PortfolioState } from "./types.js";
 
 // Recent events buffer for dedup/rate-limiting
@@ -189,20 +189,19 @@ async function processEvent(event: Event) {
       // (decisionId from earlier query is already available)
       if (decisionResult.rows.length > 0) {
         const decisionId = decisionResult.rows[0].id;
-        const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
 
         try {
           const approvalResult = await query(
             `INSERT INTO pending_approvals (decision_id, status, expires_at, created_at)
-             VALUES ($1, $2, $3, NOW())
+             VALUES ($1, $2, NOW() + INTERVAL '15 minutes', NOW())
              RETURNING id`,
-            [decisionId, 'pending', expiresAt]
+            [decisionId, 'pending']
           );
 
           if (approvalResult.rows.length > 0) {
             const approvalId = approvalResult.rows[0].id;
             console.log(
-              `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 2h) for decision ${decisionId.slice(0, 8)}`
+              `[Worker] Created pending approval ${approvalId.slice(0, 8)} (expires in 15m) for decision ${decisionId.slice(0, 8)}`
             );
 
             // Fire-and-forget: generate counter-thesis (devil's advocate) for this approval
