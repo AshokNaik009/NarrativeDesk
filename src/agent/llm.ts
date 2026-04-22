@@ -52,11 +52,37 @@ Respond with ONLY valid JSON: {"rating": <1-5>, "reasoning": "<brief explanation
 const GEMINI_MODEL = "gemini-flash-latest"; // Use flash-latest for best compatibility
 
 const OPENROUTER_FREE_MODELS = [
+  "meta-llama/llama-4-scout:free",
+  "meta-llama/llama-4-maverick:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  "nvidia/llama-3.1-nemotron-70b-instruct:free",
-  "qwen/qwen-2.5-72b-instruct:free",
-  "google/gemini-2.0-flash-exp:free",
-  "meta-llama/llama-3.1-70b-instruct:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "google/gemma-3-27b-it:free",
+  "google/gemma-3-12b-it:free",
+  "google/gemma-3-4b-it:free",
+  "google/gemma-3n-e4b-it:free",
+  "google/gemma-3n-e2b-it:free",
+  "openai/gpt-oss-120b:free",
+  "openai/gpt-oss-20b:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "nvidia/nemotron-nano-9b-v2:free",
+  "qwen/qwen3-coder:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "qwen/qwen3-235b-instruct:free",
+  "deepseek/deepseek-r1:free",
+  "deepseek/deepseek-v3:free",
+  "mistralai/mistral-small-3.1-24b:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "arcee-ai/trinity-large-preview:free",
+  "z-ai/glm-4.5-air:free",
+  "minimax/minimax-m2.5:free",
+  "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+  "liquid/lfm-2.5-1.2b-thinking:free",
+  "liquid/lfm-2.5-1.2b-instruct:free",
+  "inclusionai/ling-2.6-flash:free",
 ];
 
 async function callMainAgentGroq(
@@ -89,67 +115,96 @@ async function callMainAgentGroq(
   }
 }
 
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callMainAgentOpenRouter(
   userPrompt: string
 ): Promise<{ content: string; tokens: { prompt: number; completion: number } }> {
   const attempts: Array<{ model: string; error: string }> = [];
+  const MAX_RETRIES_PER_MODEL = 2;
 
   for (const model of OPENROUTER_FREE_MODELS) {
-    try {
-      console.log(`[Agent] Trying OpenRouter model: ${model}`);
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.openRouterApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.2,
-          max_tokens: 1024,
-          messages: [
-            { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
-            { role: "user", content: userPrompt },
-          ],
-          response_format: { type: "json_object" },
-        }),
-      });
+    for (let retryAttempt = 0; retryAttempt <= MAX_RETRIES_PER_MODEL; retryAttempt++) {
+      try {
+        console.log(`[Agent] Trying OpenRouter model: ${model} (attempt ${retryAttempt + 1}/${MAX_RETRIES_PER_MODEL + 1})`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const status = response.status;
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.openRouterApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            max_tokens: 1024,
+            messages: [
+              { role: "system", content: MAIN_AGENT_SYSTEM_PROMPT },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: { type: "json_object" },
+          }),
+        });
 
-        // Don't retry on auth errors
-        if (status === 401 || status === 403) {
-          throw new Error(`OpenRouter auth error: ${status} ${errorText}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          const status = response.status;
+
+          // Don't retry on auth errors
+          if (status === 401 || status === 403) {
+            throw new Error(`OpenRouter auth error: ${status} ${errorText}`);
+          }
+
+          // Handle rate limit with exponential backoff
+          if (status === 429) {
+            const retryAfter = response.headers.get("retry-after");
+            const waitMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.min(1000 * Math.pow(2, retryAttempt), 8000);
+            console.warn(`[Agent] Rate limited (429), waiting ${waitMs}ms before retry...`);
+            await sleep(waitMs);
+            // Continue to retry this model
+            continue;
+          }
+
+          // For other errors, try next model
+          attempts.push({ model, error: `${status} ${errorText}` });
+          console.warn(`[Agent] Model ${model} failed (${status}), trying next model...`);
+          break; // Exit retry loop, try next model
         }
 
-        // Log and try next model
-        attempts.push({ model, error: `${status} ${errorText}` });
-        console.warn(`[Agent] Model ${model} failed (${status}), trying next...`);
-        continue;
+        const data = (await response.json()) as any;
+        const content = data.choices?.[0]?.message?.content || "";
+        const tokens = {
+          prompt: data.usage?.prompt_tokens || 0,
+          completion: data.usage?.completion_tokens || 0,
+        };
+
+        console.log(`[Agent] OpenRouter model ${model} succeeded`);
+        return { content, tokens };
+      } catch (err: any) {
+        const errorMsg = err.message || String(err);
+
+        // Auth errors are fatal
+        if (errorMsg.includes("auth error")) {
+          throw err;
+        }
+
+        // Rate limit errors: retry with backoff
+        if (errorMsg.includes("429") || errorMsg.includes("rate")) {
+          if (retryAttempt < MAX_RETRIES_PER_MODEL) {
+            const waitMs = Math.min(1000 * Math.pow(2, retryAttempt), 8000);
+            console.warn(`[Agent] Rate limit error, waiting ${waitMs}ms before retry...`);
+            await sleep(waitMs);
+            continue; // Retry same model
+          }
+        }
+
+        // Other errors: log and move to next model
+        attempts.push({ model, error: errorMsg });
+        console.warn(`[Agent] Model ${model} error: ${errorMsg.slice(0, 100)}`);
+        break; // Exit retry loop, try next model
       }
-
-      const data = (await response.json()) as any;
-      const content = data.choices?.[0]?.message?.content || "";
-      const tokens = {
-        prompt: data.usage?.prompt_tokens || 0,
-        completion: data.usage?.completion_tokens || 0,
-      };
-
-      console.log(`[Agent] OpenRouter model ${model} succeeded`);
-      return { content, tokens };
-    } catch (err: any) {
-      const errorMsg = err.message || String(err);
-
-      // Auth errors are fatal
-      if (errorMsg.includes("auth error")) {
-        throw err;
-      }
-
-      // Log other errors and try next model
-      attempts.push({ model, error: errorMsg });
-      console.warn(`[Agent] Model ${model} error: ${errorMsg.slice(0, 100)}`);
     }
   }
 
