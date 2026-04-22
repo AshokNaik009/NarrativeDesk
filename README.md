@@ -5,7 +5,7 @@ Reference implementation of an end-to-end HITL agentic trading pipeline. Designe
 ![Dashboard — live activity feed with sidebar navigation, GST timestamps, filter chips, and per-event "view checks" link](docs/screenshots/dashboard.png)
 
 
----
+--- 
 
 ## Architecture
 

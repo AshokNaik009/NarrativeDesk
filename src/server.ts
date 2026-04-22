@@ -9,7 +9,6 @@ import { approvalsRouter } from "./routes/approvals.js";
 import { chatRouter } from "./routes/chat.js";
 import { decisionsRouter } from "./routes/decisions.js";
 import { metricsRouter } from "./routes/metrics.js";
-import { portfolioRouter } from "./routes/portfolio.js";
 import { pulseRouter } from "./routes/pulse.js";
 import { thesisRouter } from "./routes/thesis.js";
 import { biasRouter } from "./routes/bias.js";
@@ -35,7 +34,6 @@ app.get("/", (_req, res) => {
 app.use(metricsRouter);     // /health, /metrics, /metrics/full
 app.use(activityRouter);    // /activity, /activity/older, /activity/event/:id
 app.use(approvalsRouter);   // /approvals (+ auth middleware lives inside)
-app.use(portfolioRouter);   // /portfolio
 app.use(thesisRouter);      // /thesis, /thesis/version/:id
 app.use(decisionsRouter);   // /decisions
 app.use(pulseRouter);       // /pulse

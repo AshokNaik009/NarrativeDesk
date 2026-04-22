@@ -21,6 +21,11 @@ approvalsRouter.get("/approvals", async (req, res) => {
   try {
     const isHtmx = req.headers["hx-request"] === "true";
 
+    // First, auto-expire any pending approvals past their deadline
+    await query(
+      `UPDATE pending_approvals SET status = 'expired' WHERE status = 'pending' AND expires_at < NOW()`
+    );
+
     const pendingResult = await query(
       `SELECT
         pa.id, pa.status, pa.expires_at, pa.created_at,
@@ -30,7 +35,7 @@ approvalsRouter.get("/approvals", async (req, res) => {
       FROM pending_approvals pa
       JOIN proposed_decisions pd ON pa.decision_id = pd.id
       LEFT JOIN agent_invocations ai ON pd.agent_invocation_id = ai.id
-      WHERE pa.status = 'pending'
+      WHERE pa.status = 'pending' AND pa.expires_at > NOW()
       ORDER BY pa.expires_at ASC`
     );
 
@@ -58,7 +63,8 @@ approvalsRouter.get("/approvals", async (req, res) => {
       cardsHtml = `<div style="text-align:center;padding:40px;color:#8b949e;">No pending approvals. The agent is watching the market.</div>`;
     } else {
       for (const row of pendingResult.rows) {
-        const cd = renderCountdown(new Date(row.expires_at));
+        const expiresAt = row.expires_at ? new Date(row.expires_at) : new Date(0);
+        const cd = renderCountdown(expiresAt);
         const sideCss = row.side === "buy" ? "buy" : "sell";
         const entryZoneStr = row.entry_zone_low !== null && row.entry_zone_high !== null
           ? `$${parseFloat(row.entry_zone_low).toFixed(2)} – $${parseFloat(row.entry_zone_high).toFixed(2)}`
@@ -263,11 +269,14 @@ async function handleApprovalAction(
     const approval = stateResult.rows[0];
     const now = new Date();
 
+    // Defensive: if expires_at is NULL/invalid, treat as already expired
+    const expiresAt = approval.expires_at ? new Date(approval.expires_at) : new Date(0);
+
     const transitionResult = transition(
       {
         id: approval.id,
         status: approval.status as ApprovalStatus,
-        expiresAt: new Date(approval.expires_at),
+        expiresAt,
       },
       action,
       now,
@@ -310,19 +319,31 @@ async function handleApprovalAction(
 
     const updateResult = await query(updateSql, updateParams);
     const updated = updateResult.rows[0];
-    res.json({
-      id: updated.id,
-      status: updated.status,
-      tag: updated.tag,
-      tag_freetext: updated.tag_freetext,
-      edited_size_pct: updated.edited_size_pct,
-      edited_entry_zone_low: updated.edited_entry_zone_low,
-      edited_entry_zone_high: updated.edited_entry_zone_high,
-      edited_invalidation_price: updated.edited_invalidation_price,
-      edited_target_price: updated.edited_target_price,
-      edited_conviction: updated.edited_conviction,
-      resolved_at: updated.resolved_at,
-    });
+
+    // Return confirmation message
+    const statusMsg = action === "approve" ? "✓ Approved" : action === "reject" ? "✗ Rejected" : "✎ Edited";
+    const tagDisplay = tag ? ` (${tag})` : "";
+
+    const isHtmx = req.headers["hx-request"] === "true";
+    if (isHtmx) {
+      res.send(`<div style="padding:12px;border-radius:4px;background:#238636;color:white;font-weight:500;text-align:center;">${statusMsg}${tagDisplay}</div>`);
+    } else {
+      res.json({
+        success: true,
+        message: `${statusMsg}${tagDisplay}`,
+        id: updated.id,
+        status: updated.status,
+        tag: updated.tag,
+        tag_freetext: updated.tag_freetext,
+        edited_size_pct: updated.edited_size_pct,
+        edited_entry_zone_low: updated.edited_entry_zone_low,
+        edited_entry_zone_high: updated.edited_entry_zone_high,
+        edited_invalidation_price: updated.edited_invalidation_price,
+        edited_target_price: updated.edited_target_price,
+        edited_conviction: updated.edited_conviction,
+        resolved_at: updated.resolved_at,
+      });
+    }
   } catch (err) {
     res.status(500).json({ error: `Database error: ${err}` });
   }
