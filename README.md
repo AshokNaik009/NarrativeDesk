@@ -93,20 +93,28 @@ NarrativeDesk is a five-layer pipeline. Each layer is independently testable, ha
 
 ---
 
+## Real utility (where it shines)
+
+1. **Portfolio piece** — demonstrates async pipelines, HITL, guardrails, observability, backtest harness, bias analysis. Senior-engineer-level work.
+2. **Bias coaching tool for a human trader** — *"you reject 40% of `act` signals at 3am; 60% would've been profitable"*. This is genuinely useful and I haven't seen it packaged well elsewhere.
+3. **Agentic-systems teaching artifact** — clean reference for anyone building LLM + HITL + guardrails.
+
+---
+
 ## Roadmap
 
-The full phased plan lives in **[`docs/ROADMAP.md`](docs/ROADMAP.md)**. These phases turn the reference implementation into a defensible decision-logger and research tool:
+Phases 0–4 are shipped. Phase 5 (alt-venue execution) has been dropped — it doesn't fix the LLM-latency problem. The full plan + the next "move-the-needle" improvements live in **[`docs/ROADMAP.md`](docs/ROADMAP.md)**.
 
-| Phase | Title | Status | Addresses |
-|-------|-------|--------|-----------|
-| 0 | Honest reframing (README + `LIMITATIONS.md`) | ✅ Complete | Repositioned as HITL reference + decision-logger |
-| 1 | Structured `TradePlan` schema (entry/invalidation/target/size/conviction) | ✅ Complete | Coarse signals → measurable R-multiples + Edit modal |
-| 2 | Crypto-native signals (Binance funding/OI/liquidations, DefiLlama, Etherscan) | ✅ Complete | News-only weakness → 5× signal cadence |
-| 3 | Backtest harness replaying stored events vs. HODL | ⏳ In progress | No backtest evidence yet |
-| 4 | Decision-logger / bias analyzer dashboard | To-do | HITL approval biases (time-of-day, conviction, thesis-type) |
-| 5 | Hyperliquid / Bybit testnet execution adapter *(optional)* | To-do | Venue mismatch (crypto perps, funding, liquidations visible) |
+| # | Next improvement | Why |
+|---|------------------|-----|
+| 1 | Drop the trading-bot framing; reposition as an LLM-assisted trading journal with bias analytics | Stop competing with sub-100ms systems — lean into the decision-logger edge |
+| 2 | Run the Phase 3 backtest and publish the numbers (vs. HODL vs. random) | Honesty is the product; no backtest evidence = no claims |
+| 3 | Double down on the bias analyzer — thesis-drift charts, conviction calibration (Brier score), regret on rejected trades | Only surface with no latency floor and no venue mismatch |
+| 4 | Embed a TradingView chart on each pending approval | Cheapest, highest-leverage UX change |
+| 5 | ~~Hyperliquid / Bybit testnet execution~~ | Dropped — doesn't fix LLM-latency floor |
+| 6 | Personal-mode: log the user's own manual trades alongside agent proposals | Bias analyzer becomes a personal coach, not just an agent-auditor |
 
-To start a fresh session on any phase: `Begin Phase <N> from docs/ROADMAP.md`.
+To start a fresh session on any improvement: `Begin improvement <N> from docs/ROADMAP.md`.
 
 ---
 
