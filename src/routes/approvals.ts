@@ -326,9 +326,9 @@ async function handleApprovalAction(
 
     const isHtmx = req.headers["hx-request"] === "true";
     if (isHtmx) {
-      res.send(`<div style="padding:12px;border-radius:4px;background:#238636;color:white;font-weight:500;text-align:center;">${statusMsg}${tagDisplay}</div>`);
+      return res.status(200).send(`<div style="padding:12px;border-radius:4px;background:#238636;color:white;font-weight:500;text-align:center;">${statusMsg}${tagDisplay}</div>`);
     } else {
-      res.json({
+      return res.status(200).json({
         success: true,
         message: `${statusMsg}${tagDisplay}`,
         id: updated.id,

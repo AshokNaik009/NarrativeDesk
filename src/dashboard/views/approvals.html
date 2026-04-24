@@ -715,8 +715,12 @@
                 if (res.ok) {
                     closeModal();
                 } else {
-                    const err = await res.json();
-                    alert('Error: ' + (err.error || 'Unknown error'));
+                    try {
+                        const err = await res.json();
+                        alert('Error: ' + (err.error || 'Unknown error'));
+                    } catch {
+                        alert('Error: Server returned status ' + res.status);
+                    }
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);
